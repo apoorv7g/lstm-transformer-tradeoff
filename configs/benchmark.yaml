@@ -1,0 +1,27 @@
+# Compute benchmark config. See docs/design/benchmarking_protocol.md.
+hardware_note: "Intel Core i5-12450H (4P+4E cores, 12 threads), 16 GB RAM, Windows 11, CPU only"
+
+models: [lstm_small, lstm_base, bilstm_base, transformer_small, transformer_base, transformer_deep]
+sequence_lengths: [10, 20, 40]
+batch_sizes: [1, 32]
+intra_op_threads: [1, 8]
+inter_op_threads: 1
+
+latency:
+  warmup_calls: 50
+  timed_calls: 300
+  compiled: true                  # tf.function, training=False; not model.predict
+  report: [median, p95, iqr, mean, std]
+
+memory:
+  method: psutil_rss_peak
+  sample_interval_ms: 5
+
+isolation: fresh_process_per_model
+sessions: 3                       # repeat whole grid; report median across sessions
+shuffle_model_order: true
+
+end_to_end:
+  enabled: true
+  sequence_length: 20
+  include_decode_time: separate

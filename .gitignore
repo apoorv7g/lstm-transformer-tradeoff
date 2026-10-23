@@ -1,0 +1,79 @@
+# ---------------------------------------------------------------
+# Medical data: NEVER commit (private pediatric screening videos)
+# ---------------------------------------------------------------
+data/raw/**
+data/features/**
+!data/raw/.gitkeep
+!data/features/.gitkeep
+# split files contain video IDs only and ARE committed
+!data/splits/
+!data/splits/*.json
+
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.npy
+*.npz
+
+# ---------------------------------------------------------------
+# Model weights / checkpoints / logs
+# ---------------------------------------------------------------
+*.h5
+*.hdf5
+*.keras
+*.weights.h5
+*.ckpt*
+*.pb
+*.tflite
+*.onnx
+checkpoints/
+saved_models/
+logs/
+TensorBoard/
+events.out.tfevents.*
+results/runs/**/model*
+results/runs/**/*.keras
+
+# ---------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# ---------------------------------------------------------------
+# IDE / OS
+# ---------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local Claude Code settings (shared settings.json is fine to commit)
+.claude/settings.local.json
+
+# Scratch
+tmp/
+scratch/
+temp_video_*.mp4
+AGENTS.MD
+CLAUDE.MD

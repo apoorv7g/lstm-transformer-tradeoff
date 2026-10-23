@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Progress Review</title>
+<!--
+  Progress review deck. Mirrors the template of CacheMemory.pdf (Google Slides export):
+  720x405pt page, cream background image, RV University logo at top right, navy title tab
+  with gold Cantarell Bold 14pt, JetBrains Mono body in #595959, navy footer with gold rule.
+  Geometry was measured from the original PDF. Build: docs/presentations/progress_review/build.sh
+-->
+<style>
+  @font-face { font-family: "JetBrains Mono"; src: url("assets/JetBrainsMono.ttf"); font-weight: 100 800; }
+  @font-face { font-family: "Cantarell"; src: url("assets/Cantarell-Bold.ttf"); font-weight: 700; }
+  @page { size: 720pt 405pt; margin: 0; }
+  :root {
+    --navy: #233039; --gold: #D7AC54; --ink: #595959; --dark: #1f1f1f;
+    --peach: #F9CB9C; --blue: #C9DAF8; --grey: #858585; --rule: #DDDDDD; --head: #F2F2F2;
+    --lstm: #E69138; --tf: #3C78D8; --hyb: #6AA84F;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #fff; }
+  body { font-family: "JetBrains Mono", monospace; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 720pt; height: 405pt; position: relative; overflow: hidden; page-break-after: always; break-after: page; }
+  .slide:last-child { page-break-after: auto; break-after: auto; }
+  .bg { position: absolute; left: 0; top: 0; width: 720pt; height: 405pt; }
+  .logo { position: absolute; left: 561.2pt; top: 0; width: 158.8pt; height: 89.25pt; }
+  .tab { position: absolute; left: 183.4pt; top: 30pt; width: 329.1pt; height: 36.8pt; }
+  .tab svg { position: absolute; inset: 0; }
+  .tab span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+              font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 14pt; color: var(--gold); }
+  .footer { position: absolute; left: 0; top: 368.25pt; width: 720pt; height: 36.75pt; background: var(--navy);
+            border-radius: 18.4pt 18.4pt 0 0; }
+  .footer::after { content: ""; position: absolute; left: 0; bottom: 0; width: 720pt; height: 2.7pt; background: var(--gold); }
+  .content { position: absolute; left: 30pt; right: 30pt; top: 84pt; bottom: 44pt; }
+
+  .lead { font-size: 13pt; line-height: 1.3; }
+  .small { font-size: 9pt; line-height: 1.35; }
+  b, strong { font-weight: 700; color: #3a3a3a; }
+  ul.dash { list-style: none; }
+  ul.dash li { padding-left: 1.4em; text-indent: -1.4em; }
+  ul.dash li::before { content: "-  "; white-space: pre; }
+
+  .box { border: 0.75pt solid var(--ink); border-radius: 12pt; padding: 10pt 14pt; color: #000; }
+  .peach { background: var(--peach); }
+  .blue { background: var(--blue); }
+  .navybox { background: var(--navy); color: #fff; border-radius: 8pt; padding: 7pt 10pt; }
+  .navybox b { color: var(--gold); }
+  .boxtitle { font-weight: 700; font-size: 11pt; margin-bottom: 5pt; }
+
+  table.t { width: 100%; border-collapse: collapse; font-size: 9pt; line-height: 1.3; background: rgba(255,255,255,0.6); }
+  table.t th, table.t td { border: 0.75pt solid var(--rule); padding: 3.5pt 6pt; text-align: left; vertical-align: middle; color: #262626; }
+  table.t th { background: var(--head); font-weight: 700; }
+  table.t td.num, table.t th.num { text-align: right; }
+  .tag { display: inline-block; font-weight: 700; font-size: 7.5pt; padding: 1pt 4pt; border-radius: 3pt; color: #fff; }
+  .high { background: #A61C00; } .med { background: #B45F06; } .low { background: #7F6000; }
+  .row { display: flex; gap: 12pt; }
+  .col { flex: 1; }
+  .mono-eq { font-size: 9pt; line-height: 1.45; color: #262626; background: rgba(242,242,242,0.85);
+             border: 0.75pt solid var(--rule); border-radius: 6pt; padding: 7pt 9pt; white-space: pre; }
+  .note { font-size: 8pt; color: #6b6b6b; }
+
+  /* flow diagrams */
+  .flow { display: flex; align-items: stretch; gap: 0; }
+  .node { flex: 1; border: 0.75pt solid var(--ink); border-radius: 9pt; padding: 6pt 7pt; font-size: 8.3pt; line-height: 1.35; color: #1f1f1f; background: #fff; }
+  .node .h { font-weight: 700; font-size: 9.3pt; margin-bottom: 3pt; color: var(--navy); }
+  .arrow { width: 16pt; display: flex; align-items: center; justify-content: center; color: var(--grey); font-weight: 700; font-size: 13pt; }
+
+  /* timeline (geometry from the original timeline slide) */
+  .tl-circle { position: absolute; width: 53pt; height: 53pt; border-radius: 50%; border: 3.4pt solid var(--grey);
+               display: flex; flex-direction: column; align-items: center; justify-content: center;
+               font-weight: 700; font-size: 9pt; line-height: 1.35; color: var(--grey); background: rgba(255,255,255,0.35); }
+  .tl-circle.done { border-color: var(--navy); color: var(--navy); }
+  .tl-circle.now { border-color: var(--gold); color: #9a7425; }
+  .tl-bar { position: absolute; height: 3.4pt; width: 31pt; background: var(--grey); border-radius: 2pt; }
+  .tl-text { position: absolute; width: 116pt; padding: 0 6pt; text-align: center; }
+  .tl-title { font-weight: 700; font-size: 11.3pt; line-height: 1.3; color: #4a4a4a; height: 30pt; display: flex; align-items: flex-end; justify-content: center; }
+  .tl-desc { font-size: 8pt; line-height: 1.4; margin-top: 4pt; }
+  .pill { display: inline-block; margin-top: 4pt; font-weight: 700; font-size: 7.5pt; padding: 1.5pt 6pt; border-radius: 8pt; }
+  .pill.done { background: var(--navy); color: #fff; }
+  .pill.now { background: var(--gold); color: #fff; }
+  .pill.next { background: #e6e6e6; color: #555; }
+
+  /* bar chart */
+  .chart { font-size: 8pt; color: #333; }
+  .chart .r { display: flex; align-items: center; height: 15pt; margin-bottom: 2pt; }
+  .chart .lab { width: 110pt; text-align: right; padding-right: 6pt; }
+  .chart .track { flex: 1; position: relative; height: 10pt; }
+  .chart .bar { position: absolute; left: 0; top: 0; height: 10pt; border-radius: 0 3pt 3pt 0; }
+  .chart .val { position: absolute; top: -0.5pt; font-size: 8pt; color: #333; padding-left: 4pt; white-space: nowrap; }
+  .chart .axis { border-left: 0.75pt solid #9a9a9a; }
+  .legend { display: flex; gap: 12pt; font-size: 8pt; margin-top: 4pt; }
+  .legend i { display: inline-block; width: 9pt; height: 9pt; border-radius: 2pt; margin-right: 4pt; vertical-align: -1pt; }
+</style>
+</head>
+<body>
+
+<!-- 1. Progress at a glance -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Progress at a Glance</span></div>
+  <div class="content" style="top:96pt">
+    <p class="lead">Status on <b>23 October</b>: the architecture phase is complete.
+      The project is moving into feature extraction and training. Every design
+      decision is written down and the models are implemented.</p>
+    <div class="row" style="margin-top:16pt">
+      <div class="col box peach" style="font-size:9.5pt; line-height:1.45">
+        <div class="boxtitle">Completed</div>
+        <ul class="dash">
+          <li>Literature check of all 10 proposal papers</li>
+          <li>Full audit of the existing LSTM pipeline</li>
+          <li>Dataset profiled: 874 ear videos, 643 / 231</li>
+          <li>Data pipeline, LSTM and Transformer designs</li>
+          <li>7 model variants coded and verified (Keras 3.6)</li>
+          <li>Benchmark and statistics protocol fixed</li>
+        </ul>
+      </div>
+      <div class="col box blue" style="font-size:9.5pt; line-height:1.45">
+        <div class="boxtitle">In progress / next</div>
+        <ul class="dash">
+          <li>MobileNetV2 feature cache (T = 40, once)</li>
+          <li>Stratified 5-fold splits, saved and shared</li>
+          <li>90 runs: 6 models x 3 T values x 5 folds</li>
+          <li>CPU benchmark harness (latency, RAM, FLOPs)</li>
+          <li>Hypothesis tests and Pareto analysis</li>
+          <li>Stretch: hybrid LSTM + Transformer</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 2. Hypotheses -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Research Questions + Null Hypothesis</span></div>
+  <div class="content" style="top:94pt">
+    <p style="font-size:11pt; line-height:1.4; width:520pt">The question in testable form: given <b>identical frozen CNN frame
+      features</b>, does a Transformer temporal head beat an LSTM head, and what does it cost on a <b>CPU</b>?</p>
+    <table class="t" style="margin-top:9pt">
+      <tr><th style="width:62pt">ID</th><th>Null hypothesis</th><th style="width:205pt">How it is tested</th></tr>
+      <tr><td><b>H0-acc</b><br><span class="note">primary</span></td><td>Transformer AUROC = LSTM AUROC on short clips (T &le; 40) with frozen MobileNetV2 features</td><td>Corrected resampled t-test on paired folds; TOST equivalence, margin 0.03 AUROC</td></tr>
+      <tr><td><b>H0-cpu</b></td><td>At matched parameters, Transformer batch-1 CPU latency &le; LSTM latency</td><td>Median of &ge;300 timed calls, 3 sessions, bootstrap CI on ratio</td></tr>
+      <tr><td><b>H0-T</b></td><td>Sequence length T (10, 20, 40) does not change AUROC for either family</td><td>Same paired tests across T, Holm correction</td></tr>
+    </table>
+    <div class="navybox" style="margin-top:10pt; font-size:8.6pt; line-height:1.45">
+      <b>Why this null:</b> Soeleman et al. 2022 (LSTM &ge; Transformer on 3 small video sets, same feature design);
+      Barros et al. 2021 (CNN + LSTM, 185 ultrasound videos, ~93%); the Keras video Transformer example "works best with a
+      larger dataset". Literature check: 6 of 10 papers verified, 2 partly, 2 need DOIs.
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 3. Dataset -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Dataset</span></div>
+  <div class="content" style="top:94pt">
+    <table class="t" style="font-size:8.8pt">
+      <tr><th style="width:150pt">Measured property</th><th>Ear / otoscopy (primary)</th><th>Oral (optional)</th><th>External ear (optional)</th></tr>
+      <tr><td>Videos</td><td><b>874</b></td><td>535</td><td>50</td></tr>
+      <tr><td>Normal / Abnormal</td><td><b>643 / 231</b> (26.4% abn.)</td><td>452 / 83 (15.5%)</td><td>29 / 21 (wax)</td></tr>
+      <tr><td>Majority-class accuracy</td><td><b>73.6%</b></td><td>84.5%</td><td>58.0%</td></tr>
+      <tr><td>Resolution</td><td colspan="3">480 x 640 portrait, resized to 224 x 224</td></tr>
+      <tr><td>Duration (median, range)</td><td>13.8 s (5.2 to 43 s)</td><td>25.4 s (1.3 to 59.7 s)</td><td>17.1 s (7 to 32 s)</td></tr>
+      <tr><td>Frames per video</td><td>146 to 1263</td><td>24 to 1280</td><td>204 to 946</td></tr>
+      <tr><td>Frame rate</td><td>14 to 30 fps</td><td>14 to 29 fps</td><td>19 to 30 fps</td></tr>
+      <tr><td>Age (years)</td><td>3 to 18, mostly 9 to 13</td><td>3 to 18</td><td>3 to 6</td></tr>
+      <tr><td>Size on disk</td><td>2.6 GB</td><td>3.2 GB</td><td>193 MB</td></tr>
+    </table>
+    <ul class="dash" style="font-size:8.6pt; line-height:1.45; margin-top:8pt">
+      <li>Ear is the single "type of videos" for the study; labels come from <b>labels.json</b> {id, interpretation, age}.</li>
+      <li><b>Abnormal = positive class</b>. Accuracy alone is misleading (73.6% for free), so <b>AUROC</b> is the primary metric.</li>
+      <li>No patient ID in metadata: possible same-child leakage is documented and tested as a sensitivity check.</li>
+    </ul>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 4. Audit -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Audit of the Existing LSTM Pipeline</span></div>
+  <div class="content" style="top:94pt">
+    <table class="t" style="font-size:8.2pt">
+      <tr><th style="width:48pt">Severity</th><th>Issue found in the old code</th><th style="width:150pt">Effect</th><th style="width:178pt">Fix in the new pipeline</th></tr>
+      <tr><td><span class="tag high">HIGH</span></td><td>Pixels scaled /255 to [0,1]; MobileNetV2 expects [-1,1]</td><td>Backbone features off-distribution</td><td>mobilenet_v2.preprocess_input</td></tr>
+      <tr><td><span class="tag high">HIGH</span></td><td>OpenCV BGR frames fed to an RGB model</td><td>Colour channels swapped</td><td>cvtColor BGR to RGB</td></tr>
+      <tr><td><span class="tag high">HIGH</span></td><td>All frames held as float64: ~21 GB</td><td>Exceeds 16 GB RAM</td><td>uint8 frames, cached 1280-d features (179 MB)</td></tr>
+      <tr><td><span class="tag high">HIGH</span></td><td>Confusion matrix run on every video, incl. training data</td><td>Inflated accuracy</td><td>Held-out folds only, out-of-fold predictions</td></tr>
+      <tr><td><span class="tag med">MED</span></td><td>Plain KFold, accuracy only, Normal = 1</td><td>Misleading on 74 / 26 data</td><td>StratifiedKFold, AUROC, Abnormal = 1</td></tr>
+      <tr><td><span class="tag med">MED</span></td><td>Videos with failed frame reads silently dropped</td><td>Biased, unlogged sample</td><td>Sequential decode, repeat-pad, logging</td></tr>
+      <tr><td><span class="tag low">LOW</span></td><td>"MiniLSTM" is really a standard LSTM cell</td><td>Mislabelled baseline</td><td>Dropped; true minLSTM optional</td></tr>
+    </table>
+    <p style="font-size:9pt; margin-top:8pt; line-height:1.4"><b>Kept:</b> the data, uniform 20-frame sampling, and the exact LSTM head
+      (LSTM 256 to LSTM 128 to Dense 64). <b>Old accuracy numbers are not used as a baseline.</b></p>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 5. Data pipeline -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Data Pipeline</span></div>
+  <div class="content" style="top:100pt">
+    <div class="flow">
+      <div class="node"><div class="h">1. Video</div>.mp4, 480 x 640<br>~14 s, ~30 fps<br>labels.json</div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="h">2. Sample frames</div>T = 40 uniform<br>sequential decode<br>BGR to RGB, 224&sup2;<br>repeat-pad short clips</div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><div class="h">3. MobileNetV2</div>ImageNet, frozen<br>preprocess_input<br>avg pool to 1280-d<br>~300 M MACs / frame</div>
+      <div class="arrow">&rarr;</div>
+      <div class="node" style="background:#FFF6EA"><div class="h">4. Feature cache</div>874 x 40 x 1280<br>float32, 179 MB<br>T=20: [::2]<br>T=10: [::4]</div>
+      <div class="arrow">&rarr;</div>
+      <div class="node" style="background:#EEF3FC"><div class="h">5. Splits</div>Stratified 5-fold<br>seeds 0, 1, 2<br>inner 15% val<br>shared JSON</div>
+    </div>
+    <div class="row" style="margin-top:14pt">
+      <div class="col box peach" style="font-size:8.8pt; line-height:1.45; padding:8pt 12pt">
+        <div class="boxtitle" style="font-size:10pt">Why cache the features?</div>
+        Backbone frozen + no augmentation means identical outputs. MobileNetV2 runs <b>once</b>
+        (~35k frames, ~10 to 20 min on CPU) instead of every epoch of every fold.
+      </div>
+      <div class="col box blue" style="font-size:8.8pt; line-height:1.45; padding:8pt 12pt">
+        <div class="boxtitle" style="font-size:10pt">Fairness control</div>
+        Every model reads the <b>same</b> feature file and the <b>same</b> split file.
+        Only the temporal block differs, so differences come from that block alone.
+      </div>
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 6. Architecture -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>System Architecture</span></div>
+  <div class="content" style="top:100pt; bottom:auto; height:190pt; display:flex; gap:10pt; align-items:center">
+    <div class="node" style="flex:0 0 108pt; text-align:center"><div class="h">Input</div>frame features<br><b>(T, 1280)</b><br><span class="note">from cache</span></div>
+    <div class="arrow">&rarr;</div>
+    <div style="flex:1; border:1.2pt dashed var(--gold); border-radius:12pt; padding:8pt 9pt 7pt; background:rgba(255,255,255,0.5)">
+      <div style="font-weight:700; font-size:9pt; color:#9a7425; text-align:center; margin-bottom:6pt">Temporal block: the ONLY part that varies</div>
+      <div class="box peach" style="padding:5pt 9pt; font-size:8.4pt; line-height:1.4; border-radius:8pt">
+        <b>LSTM</b> &nbsp;LSTM(256, seq) &rarr; LSTM(128)<br><span style="color:#444">sequential over T, O(T&middot;d&sup2;)</span></div>
+      <div class="box blue" style="padding:5pt 9pt; font-size:8.4pt; line-height:1.4; margin-top:5pt; border-radius:8pt">
+        <b>Transformer</b> &nbsp;Dense(1280&rarr;d) + pos-emb &rarr; N x [MHA + FFN] &rarr; pool<br><span style="color:#444">parallel over T, O(T&middot;d&sup2; + T&sup2;&middot;d)</span></div>
+      <div class="box" style="padding:5pt 9pt; font-size:8.4pt; line-height:1.4; margin-top:5pt; border-radius:8pt; background:#E4EFDC">
+        <b>Hybrid</b> (stretch) &nbsp;LSTM(128, seq) &rarr; 1 attention block &rarr; pool</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="node" style="flex:0 0 112pt; text-align:center"><div class="h">Shared head</div>Dense(64, relu)<br>Dropout(0.5)<br>Dense(1, sigmoid)<br><span class="note">P(Abnormal)</span></div>
+  </div>
+  <div style="position:absolute; left:30pt; right:30pt; top:308pt; font-size:8.6pt; line-height:1.45">
+    <b>Held constant:</b> features, folds, classifier head, loss (BCE + balanced class weights), epoch budget,
+    early stopping on validation AUROC, seeds. <b>Varied:</b> temporal block and sequence length T.
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 7. LSTM design -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>LSTM Design</span></div>
+  <div class="content" style="top:94pt">
+    <div class="row">
+      <div style="flex:0 0 238pt">
+<div class="mono-eq">i<sub>t</sub> = &sigma;(W<sub>i</sub>x<sub>t</sub> + U<sub>i</sub>h<sub>t-1</sub> + b<sub>i</sub>)
+f<sub>t</sub> = &sigma;(W<sub>f</sub>x<sub>t</sub> + U<sub>f</sub>h<sub>t-1</sub> + b<sub>f</sub>)
+g<sub>t</sub> = tanh(W<sub>g</sub>x<sub>t</sub> + U<sub>g</sub>h<sub>t-1</sub> + b<sub>g</sub>)
+o<sub>t</sub> = &sigma;(W<sub>o</sub>x<sub>t</sub> + U<sub>o</sub>h<sub>t-1</sub> + b<sub>o</sub>)
+c<sub>t</sub> = f<sub>t</sub> &odot; c<sub>t-1</sub> + i<sub>t</sub> &odot; g<sub>t</sub>
+h<sub>t</sub> = o<sub>t</sub> &odot; tanh(c<sub>t</sub>)
+
+params / layer = 4(d<sub>in</sub>h + h&sup2; + h)
+MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
+      </div>
+      <div class="col">
+        <table class="t" style="font-size:8.4pt">
+          <tr><th>Preset</th><th>Layers</th><th class="num">Params</th><th class="num">MACs T=20</th></tr>
+          <tr><td>lstm_small</td><td>LSTM(128)</td><td class="num">729,729</td><td class="num">14.4 M</td></tr>
+          <tr><td><b>lstm_base</b></td><td>LSTM(256) &rarr; LSTM(128)</td><td class="num">1,779,329</td><td class="num">35.4 M</td></tr>
+          <tr><td>bilstm_base</td><td>BiLSTM(128) &rarr; BiLSTM(64)</td><td class="num">1,615,489</td><td class="num">32.1 M</td></tr>
+        </table>
+        <ul class="dash" style="font-size:8.4pt; line-height:1.45; margin-top:7pt">
+          <li><b>lstm_base</b> = exact head of the existing model, now on correct features.</li>
+          <li>89% of lstm_base parameters sit in the first 1280 &rarr; 4x256 input kernel.</li>
+          <li>T dependent steps per layer: poor multi-core use at batch 1.</li>
+          <li>recurrent_dropout = 0 keeps the fused, fast LSTM kernel.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="navybox" style="margin-top:9pt; font-size:8.4pt; line-height:1.4">
+      <b>Recipe:</b> Adam 1e-3, clipnorm 1.0, BCE, balanced class weights, batch 32, max 100 epochs,
+      early stopping on val AUROC (patience 15), ReduceLROnPlateau.
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 8. Transformer design -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Transformer Design</span></div>
+  <div class="content" style="top:94pt">
+    <div class="row">
+      <div style="flex:0 0 200pt">
+        <div style="display:flex; flex-direction:column; gap:3pt; font-size:8pt; text-align:center; color:#1f1f1f">
+          <div class="node" style="padding:3pt">features (T, 1280)</div>
+          <div class="node" style="padding:3pt">Dense 1280 &rarr; d &nbsp;+ learned pos-emb</div>
+          <div style="border:1.2pt dashed var(--tf); border-radius:8pt; padding:4pt; background:rgba(201,218,248,0.45)">
+            <div style="font-weight:700; color:var(--tf); margin-bottom:3pt">N x encoder block (pre-LN)</div>
+            <div class="node" style="padding:3pt">x + MHA(LN(x)), key_dim = d/h</div>
+            <div class="node" style="padding:3pt; margin-top:3pt">x + FFN(LN(x)), GELU, 2d</div>
+          </div>
+          <div class="node" style="padding:3pt">LayerNorm &rarr; mean-pool over T</div>
+          <div class="node" style="padding:3pt">shared head &rarr; P(Abnormal)</div>
+        </div>
+      </div>
+      <div class="col">
+        <table class="t" style="font-size:8.2pt">
+          <tr><th>Preset</th><th>d / heads / FFN / N</th><th class="num">Params</th><th class="num">MACs T=20</th></tr>
+          <tr><td>transformer_small</td><td>128 / 4 / 256 / 2</td><td class="num">440,065</td><td class="num">8.7 M</td></tr>
+          <tr><td><b>transformer_base</b></td><td>256 / 4 / 512 / 2</td><td class="num">1,404,289</td><td class="num">27.9 M</td></tr>
+          <tr><td>transformer_deep</td><td>256 / 8 / 512 / 4</td><td class="num">2,458,497</td><td class="num">49.3 M</td></tr>
+          <tr><td>hybrid_base</td><td>LSTM 128 + 1 block</td><td class="num">862,465</td><td class="num">17.1 M</td></tr>
+        </table>
+        <div style="font-size:8.2pt; line-height:1.45; margin-top:7pt"><b>Based on the Keras video Transformer example, with changes:</b></div>
+        <ul class="dash" style="font-size:8.2pt; line-height:1.45">
+          <li>Projection to d: in the example 4.2 M of 4.23 M params sit in attention.</li>
+          <li>Pre-LN instead of post-LN: more stable on small data.</li>
+          <li>Mean pooling instead of max; no CLS token to learn.</li>
+          <li><b>transformer_base</b> is parameter-matched to lstm_base (1.40 M vs 1.78 M).</li>
+        </ul>
+      </div>
+    </div>
+    <div class="navybox" style="margin-top:8pt; font-size:8.2pt; line-height:1.4">
+      <b>Recipe:</b> AdamW 3e-4, weight decay 1e-2, 5-epoch warm-up, dropout 0.1; same loss, batch, epoch budget
+      and early stopping as the LSTM.
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 9. Compute analysis -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Compute Analysis (Pre-Experiment)</span></div>
+  <div class="content" style="top:94pt">
+    <div class="row">
+      <div style="flex:0 0 318pt">
+        <table class="t" style="font-size:8pt">
+          <tr><th>MACs per clip</th><th class="num">T=10</th><th class="num">T=20</th><th class="num">T=40</th><th class="num">T&sup2; share</th></tr>
+          <tr><td>lstm_small</td><td class="num">7.2 M</td><td class="num">14.4 M</td><td class="num">28.8 M</td><td class="num">-</td></tr>
+          <tr><td>lstm_base</td><td class="num">17.7 M</td><td class="num">35.4 M</td><td class="num">70.8 M</td><td class="num">-</td></tr>
+          <tr><td>bilstm_base</td><td class="num">16.1 M</td><td class="num">32.1 M</td><td class="num">64.2 M</td><td class="num">-</td></tr>
+          <tr><td>transformer_small</td><td class="num">4.3 M</td><td class="num">8.7 M</td><td class="num">17.9 M</td><td class="num">4.6%</td></tr>
+          <tr><td>transformer_base</td><td class="num">13.9 M</td><td class="num">27.9 M</td><td class="num">56.7 M</td><td class="num">2.9%</td></tr>
+          <tr><td>transformer_deep</td><td class="num">24.5 M</td><td class="num">49.3 M</td><td class="num">100.3 M</td><td class="num">3.3%</td></tr>
+          <tr><td><b>MobileNetV2 backbone</b></td><td class="num">3.0 G</td><td class="num">6.0 G</td><td class="num">12.0 G</td><td class="num">-</td></tr>
+        </table>
+        <ul class="dash" style="font-size:8pt; line-height:1.45; margin-top:6pt">
+          <li>Attention T&sup2; term only dominates when T &gt; 2d + FFN (512 frames at d=128).</li>
+          <li>Temporal head is <b>&lt; 1%</b> of end-to-end compute.</li>
+        </ul>
+      </div>
+      <div class="col">
+        <div style="font-weight:700; font-size:9pt; color:#3a3a3a">Smoke test: batch-1 latency, T = 20 (ms)</div>
+        <div class="note" style="margin-bottom:5pt">eager mode, untuned, single run. A hint, not a result.</div>
+        <div class="chart">
+          <div class="r"><div class="lab">transformer_small</div><div class="track axis"><div class="bar" style="width:16.9%; background:var(--tf)"></div><div class="val" style="left:16.9%">116</div></div></div>
+          <div class="r"><div class="lab">transformer_base</div><div class="track axis"><div class="bar" style="width:19.0%; background:var(--tf)"></div><div class="val" style="left:19.0%">130</div></div></div>
+          <div class="r"><div class="lab">lstm_small</div><div class="track axis"><div class="bar" style="width:27.8%; background:var(--lstm)"></div><div class="val" style="left:27.8%">190</div></div></div>
+          <div class="r"><div class="lab">transformer_deep</div><div class="track axis"><div class="bar" style="width:31.7%; background:var(--tf)"></div><div class="val" style="left:31.7%">217</div></div></div>
+          <div class="r"><div class="lab">hybrid_base</div><div class="track axis"><div class="bar" style="width:35.8%; background:var(--hyb)"></div><div class="val" style="left:35.8%">245</div></div></div>
+          <div class="r"><div class="lab">lstm_base</div><div class="track axis"><div class="bar" style="width:54.7%; background:var(--lstm)"></div><div class="val" style="left:54.7%">375</div></div></div>
+          <div class="r"><div class="lab">bilstm_base</div><div class="track axis"><div class="bar" style="width:100%; background:var(--lstm)"></div><div class="val" style="left:auto; right:3pt; color:#fff; font-weight:700">685</div></div></div>
+        </div>
+        <div class="legend"><span><i style="background:var(--lstm)"></i>LSTM</span><span><i style="background:var(--tf)"></i>Transformer</span><span><i style="background:var(--hyb)"></i>Hybrid</span></div>
+        <div style="font-size:8pt; line-height:1.4; margin-top:6pt">On CPU at short T, the sequential LSTM loop may be <b>slower</b>, against the common belief. Testing this is H0-cpu.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 10. Benchmark protocol -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Benchmarking + Evaluation Protocol</span></div>
+  <div class="content" style="top:96pt">
+    <div class="row">
+      <div class="col box peach" style="font-size:8.6pt; line-height:1.45; padding:8pt 12pt">
+        <div class="boxtitle" style="font-size:10pt">Accuracy</div>
+        <ul class="dash">
+          <li><b>AUROC</b> (primary), macro-F1, balanced accuracy</li>
+          <li>Sensitivity (Abnormal recall), specificity, AUPRC</li>
+          <li>Stratified 5-fold x up to 3 seeds</li>
+          <li>Metrics only on held-out folds; out-of-fold predictions saved per video</li>
+          <li>Grid: 6 models x T {10, 20, 40} x 5 folds = 90 runs</li>
+        </ul>
+      </div>
+      <div class="col box blue" style="font-size:8.6pt; line-height:1.45; padding:8pt 12pt">
+        <div class="boxtitle" style="font-size:10pt">Compute (CPU only)</div>
+        <ul class="dash">
+          <li>Params; MACs (analytic + TF profiler)</li>
+          <li>Latency: 50 warm-up + &ge;300 timed calls, median / p95</li>
+          <li>Batch 1 and 32; 1 and 8 threads; fresh process per model</li>
+          <li>Peak RAM (RSS), train s / epoch, model file size</li>
+          <li>Head-only <b>and</b> end-to-end with MobileNetV2</li>
+        </ul>
+      </div>
+    </div>
+    <div class="navybox" style="margin-top:10pt; font-size:8.4pt; line-height:1.5">
+      <b>Machine:</b> Intel Core i5-12450H (8 cores / 12 threads), 16 GB RAM, Windows 11, Python 3.11, TF 2.17, Keras 3.6<br>
+      <b>Statistics:</b> corrected resampled t-test, 95% CI + Cohen's d, TOST (0.03 AUROC), McNemar + DeLong, Holm correction
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 11. Timeline -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Project Timeline + Status</span></div>
+
+  <!-- today marker: Oct 23 sits 4/7 of the way from Oct 19 (x=298) to Oct 26 (x=418) -->
+  <div style="position:absolute; left:366.6pt; top:104pt; width:0; height:76pt; border-left:1.2pt dashed var(--gold)"></div>
+  <div style="position:absolute; left:326.6pt; top:94pt; width:80pt; text-align:center; font-size:7.5pt; font-weight:700; color:#9a7425; background:rgba(255,255,255,0.8)">TODAY, OCT 23</div>
+
+  <div class="tl-circle done" style="left:31.5pt; top:118pt">Oct<br>5</div>
+  <div class="tl-bar" style="left:102pt; top:143pt"></div>
+  <div class="tl-circle done" style="left:151.5pt; top:118pt">Oct<br>12</div>
+  <div class="tl-bar" style="left:222pt; top:143pt"></div>
+  <div class="tl-circle now" style="left:271.5pt; top:118pt">Oct<br>19</div>
+  <div class="tl-bar" style="left:342pt; top:143pt"></div>
+  <div class="tl-circle" style="left:391.5pt; top:118pt">Oct<br>26</div>
+  <div class="tl-bar" style="left:462pt; top:143pt"></div>
+  <div class="tl-circle" style="left:511.5pt; top:118pt">Nov<br>2</div>
+  <div class="tl-bar" style="left:582pt; top:143pt"></div>
+  <div class="tl-circle" style="left:631.5pt; top:118pt">Nov<br>9</div>
+
+  <div class="tl-text" style="left:0pt; top:176pt"><div class="tl-title">Architecture Finalisation</div><span class="pill done">DONE</span>
+    <div class="tl-desc">Designs for data, LSTM, Transformer and benchmark. 7 models coded.</div></div>
+  <div class="tl-text" style="left:120pt; top:176pt"><div class="tl-title">Data Preprocessing</div><span class="pill done">DONE (DESIGN)</span>
+    <div class="tl-desc">Dataset profiled and audited; fixed preprocessing specified.</div></div>
+  <div class="tl-text" style="left:240pt; top:176pt"><div class="tl-title">Training</div><span class="pill now">IN PROGRESS</span>
+    <div class="tl-desc">Feature cache, splits and k-fold loop; 90 runs on cached features.</div></div>
+  <div class="tl-text" style="left:360pt; top:176pt"><div class="tl-title">Benchmarking</div><span class="pill next">UPCOMING</span>
+    <div class="tl-desc">Latency, RAM, FLOPs, train time on CPU; 3 timing sessions.</div></div>
+  <div class="tl-text" style="left:480pt; top:176pt"><div class="tl-title">Final Analysis</div><span class="pill next">UPCOMING</span>
+    <div class="tl-desc">Hypothesis tests, Pareto plots, final presentation.</div></div>
+  <div class="tl-text" style="left:600pt; top:176pt"><div class="tl-title">Paper^</div><span class="pill next">BUFFER</span>
+    <div class="tl-desc">^If time permits: hybrid model + paper draft.</div></div>
+
+  <div style="position:absolute; left:30pt; right:30pt; top:318pt; font-size:8.4pt; line-height:1.45; text-align:center">
+    About one week behind the original plan. Caching features turns each training run from hours into minutes,
+    which is how the schedule is recovered.
+  </div>
+  <div class="footer"></div>
+</section>
+
+<!-- 12. Repo + next steps -->
+<section class="slide">
+  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Codebase + Next Steps</span></div>
+  <div class="content" style="top:94pt">
+    <div class="row">
+      <div style="flex:0 0 290pt">
+<div class="mono-eq" style="font-size:7.9pt; line-height:1.42">lstm-transformer-tradeoff/
+├── configs/      data, lstm, transformer, benchmark
+├── docs/         summary, abstract, scope, motivation
+│   ├── design/   pipeline, LSTM, Transformer, protocol
+│   └── research/ legacy audit, literature review
+├── src/
+│   ├── models/   heads, lstm, transformer, hybrid  [done]
+│   ├── data/     video_io, features, splits        [next]
+│   ├── training/ k-fold training loop              [next]
+│   └── benchmark/ latency, memory, flops, report   [todo]
+├── scripts/      model_summary                     [done]
+├── data/         raw videos + feature cache (not in git)
+└── results/      metrics, figures</div>
+      </div>
+      <div class="col">
+        <table class="t" style="font-size:8.2pt">
+          <tr><th>Next step</th><th style="width:96pt">Target</th></tr>
+          <tr><td>Frame sampler + MobileNetV2 feature cache</td><td>Oct 24</td></tr>
+          <tr><td>Saved stratified splits (3 seeds)</td><td>Oct 25</td></tr>
+          <tr><td>Training loop; first lstm_base fold</td><td>Oct 25</td></tr>
+          <tr><td>Full 90-run training grid</td><td>Oct 26 to 29</td></tr>
+          <tr><td>Benchmark harness + compute grid</td><td>Oct 29 to Nov 1</td></tr>
+          <tr><td>Statistics, Pareto plots, slides</td><td>Nov 2 to 6</td></tr>
+        </table>
+        <div class="box peach" style="margin-top:8pt; font-size:8pt; line-height:1.45; padding:6pt 10pt; border-radius:8pt">
+          <b>Open items:</b> DOIs for 2 proposal papers; confirm ear as the single dataset;
+          any way to recover patient grouping.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer"></div>
+</section>
+
+</body>
+</html>
