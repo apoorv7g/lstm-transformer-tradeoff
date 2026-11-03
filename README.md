@@ -5,8 +5,9 @@ LSTM temporal model is replaced by a Transformer encoder, applied to short clini
 videos labelled **Normal** or **Abnormal**.
 
 **Status (3 Nov 2026):**
-- Done: design phase, model definitions implemented and verified, dataset and environment set up.
-- In progress: feature extraction and the training pipeline.
+- Done: design phase, model definitions, dataset and environment, frame sampling, the cached
+  MobileNetV2 feature tensor (535 x 40 x 1280) and the shared cross-validation splits.
+- In progress: the training pipeline.
 - See [Project status](#project-status).
 
 ---
@@ -193,8 +194,8 @@ The study runs as a sequence of steps, each driven by a config file in `configs/
 | Step | Purpose | Command | Status |
 |---|---|---|---|
 | 1. Verify models | Build all presets and check parameter counts | `python -m scripts.model_summary` | Implemented |
-| 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Planned |
-| 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Planned |
+| 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Implemented |
+| 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Implemented |
 | 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/runs/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Planned |
 | 5. Benchmark | Measure latency, memory and FLOPs on CPU | `python -m src.benchmark.run_grid` | Planned |
 | 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `notebooks/analysis.ipynb` | Planned |
@@ -241,7 +242,7 @@ lstm-transformer-tradeoff/
 | Phase | Planned | Status |
 |---|---|---|
 | Architecture finalisation | Week of Oct 5 | Complete |
-| Data preprocessing | Week of Oct 12 | Dataset profiled and audited; extraction code in progress |
+| Data preprocessing | Week of Oct 12 | Complete: features cached, splits written |
 | Training | Week of Oct 19 | In progress |
 | Benchmarking | Week of Oct 26 | Not started |
 | Final analysis | Week of Nov 2 | Not started |
