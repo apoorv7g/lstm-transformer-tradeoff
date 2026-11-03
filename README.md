@@ -198,13 +198,31 @@ All code is five files in `src/`. Settings are plain constants at the top of eac
 | `src/hybrid.py` | LSTM followed by attention (`hybrid_base`); new hybrid designs go here |
 | `src/tests.py` | All automated checks |
 
+Setup (done):
+
 | Step | Command | Status |
 |---|---|---|
-| 1. Extract features | `python -m src.common extract` | Done (cache built) |
-| 2. Create splits | `python -m src.common splits` | Done (committed) |
-| 3. Train | `python -m src.lstm --preset lstm_base --T 20 --seed 0` (same for `src.transformer`, `src.hybrid`) | Ready, not run |
-| 4. Benchmark | `python -m src.common benchmark-all` (or `python -m src.lstm --preset lstm_base --benchmark --threads 1`) | Ready, not run |
-| 5. Summarise | `python -m src.common summary` | Ready, not run |
+| Extract features | `python -m src.common extract` | Done (cache built) |
+| Create splits | `python -m src.common splits` | Done (committed) |
+
+Experiment flow (code ready, nothing run yet):
+
+| Step | What and why | Command | Status |
+|---|---|---|---|
+| 1. Sanity run | One fold of each main model. Check `history.csv` and `run.json`: validation AUROC rises above 0.5 and levels off, early stopping fires at a sensible epoch, loss falls without NaN | `python -m src.lstm --preset lstm_base --T 20 --seed 0 --folds 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0 --folds 0` | Pending |
+| 2. LR check (optional) | Try the other learning rate once on seed 0, then fix one for all runs. Results go to separate `_lr...` folders | `python -m src.lstm --preset lstm_base --T 20 --seed 0 --lr 3e-4` and `python -m src.transformer --preset transformer_base --T 20 --seed 0 --lr 1e-3` | Pending |
+| 3. Main pair, 5 folds | First answer to the main question (Transformer vs LSTM accuracy) | `python -m src.lstm --preset lstm_base --T 20 --seed 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0` | Pending |
+| 4. Full grid | Every model x T in {10, 20, 40} x seeds {0, 1, 2}; overnight is fine. Completed runs are skipped, so re-running resumes | see the loop below | Pending |
+| 5. Benchmark grid | CPU latency, memory and FLOPs; run plugged in with nothing else open. Resumes if interrupted | `python -m src.common benchmark-all` | Pending |
+| 6. Statistics and plots | Corrected t-test, TOST equivalence, DeLong, McNemar, Pareto plots; then `python -m src.common summary` | to be written once real results exist | Not written |
+
+Full grid (step 4), PowerShell:
+
+```powershell
+foreach ($s in 0, 1, 2) { foreach ($t in 10, 20, 40) { foreach ($m in "lstm", "transformer", "hybrid") {
+    python -m src.$m --T $t --seed $s
+} } }
+```
 
 Model files also take `--folds`, `--lr`, `--epochs`, `--overwrite` and `--dry-run`. Without
 `--preset`, every preset in the file is used.
