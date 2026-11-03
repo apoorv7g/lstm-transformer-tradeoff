@@ -196,7 +196,7 @@ The study runs as a sequence of steps, each driven by a config file in `configs/
 | 1. Verify models | Build all presets and check parameter counts | `python -m src.models.summary` | Implemented |
 | 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Implemented |
 | 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Implemented |
-| 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Planned |
+| 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Implemented (not yet run) |
 | 5. Benchmark | Measure latency, memory and FLOPs on CPU | `python -m src.benchmark.run_grid` | Planned |
 | 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `src/benchmark/report.py` | Planned |
 
@@ -237,7 +237,7 @@ Every folder has its own `README.md` explaining what is inside and how to use it
 |---|---|---|
 | Architecture finalisation | Week of Oct 5 | Complete |
 | Data preprocessing | Week of Oct 12 | Complete: features cached, splits written |
-| Training | Week of Oct 19 | In progress |
+| Training | Week of Oct 19 | In progress: training loop ready, no runs yet |
 | Benchmarking | Week of Oct 26 | Not started |
 | Final analysis | Week of Nov 2 | Not started |
 | Paper and hybrid model (buffer) | Week of Nov 9 | Optional |

@@ -3,6 +3,7 @@ dataset: oral                     # the only dataset (ear dropped 3 Nov 2026)
 raw_dir: data/raw            # labels.json + video-*.mp4 (copied from DL_test1/Task - 2 ORAL/oral)
 features_dir: data/features
 splits_dir: data/splits
+results_dir: results              # one folder per training run (src/training/train.py)
 
 labels:
   positive: Abnormal              # Abnormal = 1 (legacy used Normal = 1; do not copy that)

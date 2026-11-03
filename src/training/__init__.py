@@ -1,4 +1,4 @@
-"""Training loop (planned): train.py: one run per (preset, T, seed, fold).
+"""Training loop: train.py runs one model per (preset, T, seed, fold); metrics.py scores a fold.
 
 Recipes: configs/lstm.yaml, configs/transformer.yaml.
 """

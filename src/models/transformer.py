@@ -23,6 +23,11 @@ class PositionalEmbedding(layers.Layer):
         self.d_model = d_model
         self.position_embeddings = layers.Embedding(sequence_length, d_model)
 
+    def build(self, input_shape):
+        # Explicit build so a reloaded .keras file restores weights eagerly, not on first call.
+        self.position_embeddings.build((self.sequence_length,))
+        super().build(input_shape)
+
     def call(self, x):
         positions = ops.arange(0, self.sequence_length, 1)
         return x + self.position_embeddings(positions)
@@ -52,6 +57,15 @@ class TransformerEncoderBlock(layers.Layer):
         self.ff1 = layers.Dense(ff_dim, activation="gelu")
         self.ff2 = layers.Dense(d_model)
         self.drop2 = layers.Dropout(dropout)
+
+    def build(self, input_shape):
+        # Explicit build so a reloaded .keras file restores weights eagerly, not on first call.
+        self.ln1.build(input_shape)
+        self.attn.build(input_shape, input_shape)
+        self.ln2.build(input_shape)
+        self.ff1.build(input_shape)
+        self.ff2.build((*input_shape[:-1], self.ff_dim))
+        super().build(input_shape)
 
     def call(self, x, training=None):
         h = self.ln1(x)
