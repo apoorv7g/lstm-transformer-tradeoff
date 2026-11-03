@@ -66,14 +66,14 @@ faster than the LSTMs. That is not yet a result, only a reason to measure carefu
 ## What already exists (23 Oct)
 
 - Done: Proposal and literature list (10 papers, now checked; see
-  `docs/research/literature_review.md`)
+  `docs/literature_review.md`)
 - Done: Full review of the legacy `DL_test1` LSTM code. It found real bugs that we fix here:
   - wrong MobileNetV2 input scaling and BGR channel order
   - data leakage in its confusion-matrix evaluation
   - non-stratified folds on imbalanced data
   - an approximately 21 GB float64 in-memory video tensor
 
-  Details: `docs/research/legacy_pipeline_audit.md`.
+  Details: `docs/legacy_pipeline_audit.md`.
 - Done: Model code for every preset (`src/models/`). All build under Keras 3.6 / TF 2.17, and their
   parameter counts are checked.
 - Done: Design docs for the data pipeline, LSTM, Transformer and benchmarking protocol.

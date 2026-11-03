@@ -33,7 +33,7 @@ mean cross-validated AUROC of the Transformer head is **not different** from tha
 **H₀-cpu (secondary).** At matched parameter count, the Transformer head's median batch-1 CPU
 inference latency is **≤** the LSTM head's.
 - H₁-cpu: the Transformer is slower.
-- This is a genuine test. Theory (see `docs/design/transformer_design.md` §5) suggests that on CPU
+- This is a genuine test. Theory (see `docs/transformer_design.md` §5) suggests that on CPU
   at short T the sequential LSTM loop may be the slower one, the opposite of the common belief.
 
 **H₀-T (scaling).** Increasing T from 10 to 40 does not change AUROC for either family.
@@ -108,7 +108,7 @@ Windows 11. Python 3.11, TensorFlow 2.17, Keras 3.6. No GPU anywhere in the meas
 | Dates | Work | Exit criterion |
 |---|---|---|
 | Oct 23–25 | Feature extraction (T=40, subsampled to 20 and 10), saved splits, training loop | `data/features/oral_T40.npz` exists; one fold of `lstm_base` trains end-to-end |
-| Oct 26–29 | Full training grid (6 models × 3 T × 5 folds = 90 runs, a few minutes each on cached features) | `results/runs/*/metrics.json` complete |
+| Oct 26–29 | Full training grid (6 models × 3 T × 5 folds = 90 runs, a few minutes each on cached features) | `results/*/metrics.json` complete |
 | Oct 29–Nov 1 | Benchmark harness and the full compute grid | `results/benchmark.csv` complete |
 | Nov 2–6 | Statistics, plots, write-up, slides | Final presentation ready |
 | Nov 9 (buffer) | Hybrid, paper draft | Optional |

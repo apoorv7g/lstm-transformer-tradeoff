@@ -1,5 +1,5 @@
 # LSTM family. Presets are defined in src/models/lstm.py (PRESETS); this file
-# records the training recipe. See docs/design/lstm_design.md.
+# records the training recipe. See docs/lstm_design.md.
 presets: [lstm_small, lstm_base, bilstm_base]
 
 training:

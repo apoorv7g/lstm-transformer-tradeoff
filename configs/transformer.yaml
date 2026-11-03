@@ -1,6 +1,6 @@
 # Transformer family (+ hybrid). Presets are defined in src/models/transformer.py
 # and src/models/hybrid.py; this file records the training recipe.
-# See docs/design/transformer_design.md.
+# See docs/transformer_design.md.
 presets: [transformer_small, transformer_base, transformer_deep]
 stretch_presets: [hybrid_base]
 

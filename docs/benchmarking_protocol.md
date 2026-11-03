@@ -32,7 +32,7 @@ Code: `src/benchmark/` (planned). Config: `configs/benchmark.yaml`.
 | Accuracy | Reported for comparison with legacy results only. **Majority baseline = 84.5%** |
 
 Also store the out-of-fold probabilities for every video, for pooled ROC curves, McNemar's test and
-DeLong's test. Output per run goes to `results/runs/{model}_T{T}_s{seed}_f{fold}/`:
+DeLong's test. Output per run goes to `results/{model}_T{T}_s{seed}_f{fold}/`:
 - `metrics.json`
 - `oof_predictions.csv`
 - `history.csv`

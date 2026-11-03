@@ -5,7 +5,7 @@ Goal: turn raw videos into a **single cached feature tensor** that every model c
 differ, the comparison is meaningless.
 
 ```
-data/raw/oral/labels.json + video-*.mp4
+data/raw/labels.json + video-*.mp4
         │  src/data/video_io.py        sample_frames(path, T) -> uint8 (T, 224, 224, 3) RGB
         ▼
         │  src/data/extract_features.py  MobileNetV2(pooling="avg") on batches of frames

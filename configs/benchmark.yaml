@@ -1,4 +1,4 @@
-# Compute benchmark config. See docs/design/benchmarking_protocol.md.
+# Compute benchmark config. See docs/benchmarking_protocol.md.
 hardware_note: "Intel Core i5-12450H (4P+4E cores, 12 threads), 16 GB RAM, Windows 11, CPU only"
 
 models: [lstm_small, lstm_base, bilstm_base, transformer_small, transformer_base, transformer_deep]

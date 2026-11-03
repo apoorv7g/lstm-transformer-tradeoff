@@ -1,6 +1,6 @@
 """Print parameter counts for every preset at several sequence lengths.
 
-Usage (from repo root):  python -m scripts.model_summary
+Usage (from repo root):  python -m src.models.summary
 """
 
 import os

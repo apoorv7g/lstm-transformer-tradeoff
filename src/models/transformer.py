@@ -1,4 +1,4 @@
-"""Transformer temporal heads. Design rationale: docs/design/transformer_design.md.
+"""Transformer temporal heads. Design rationale: docs/transformer_design.md.
 
 Structure follows the Keras "Video Classification with Transformers" example
 (PositionalEmbedding + TransformerEncoder over per-frame CNN features), with

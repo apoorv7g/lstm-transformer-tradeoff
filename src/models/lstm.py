@@ -1,4 +1,4 @@
-"""LSTM temporal heads. Design rationale: docs/design/lstm_design.md."""
+"""LSTM temporal heads. Design rationale: docs/lstm_design.md."""
 
 import keras
 from keras import layers

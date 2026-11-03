@@ -10,8 +10,8 @@
   Geometry was measured from the original PDF. Build: docs/presentations/progress_review/build.sh
 -->
 <style>
-  @font-face { font-family: "JetBrains Mono"; src: url("assets/JetBrainsMono.ttf"); font-weight: 100 800; }
-  @font-face { font-family: "Cantarell"; src: url("assets/Cantarell-Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "JetBrains Mono"; src: url("JetBrainsMono.ttf"); font-weight: 100 800; }
+  @font-face { font-family: "Cantarell"; src: url("Cantarell-Bold.ttf"); font-weight: 700; }
   @page { size: 720pt 405pt; margin: 0; }
   :root {
     --navy: #233039; --gold: #D7AC54; --ink: #595959; --dark: #1f1f1f;
@@ -97,7 +97,7 @@
 
 <!-- 1. Progress at a glance -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Progress at a Glance</span></div>
   <div class="content" style="top:96pt">
     <p class="lead">Status on <b>23 October</b>: the architecture phase is complete.
@@ -133,7 +133,7 @@
 
 <!-- 2. Hypotheses -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Research Questions + Null Hypothesis</span></div>
   <div class="content" style="top:94pt">
     <p style="font-size:11pt; line-height:1.4; width:520pt">The question in testable form: given <b>identical frozen CNN frame
@@ -155,7 +155,7 @@
 
 <!-- 3. Dataset -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Dataset</span></div>
   <div class="content" style="top:94pt">
     <table class="t" style="font-size:8.8pt">
@@ -181,7 +181,7 @@
 
 <!-- 4. Audit -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Audit of the Existing LSTM Pipeline</span></div>
   <div class="content" style="top:94pt">
     <table class="t" style="font-size:8.2pt">
@@ -202,7 +202,7 @@
 
 <!-- 5. Data pipeline -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Data Pipeline</span></div>
   <div class="content" style="top:100pt">
     <div class="flow">
@@ -234,7 +234,7 @@
 
 <!-- 6. Architecture -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>System Architecture</span></div>
   <div class="content" style="top:100pt; bottom:auto; height:190pt; display:flex; gap:10pt; align-items:center">
     <div class="node" style="flex:0 0 108pt; text-align:center"><div class="h">Input</div>frame features<br><b>(T, 1280)</b><br><span class="note">from cache</span></div>
@@ -260,7 +260,7 @@
 
 <!-- 7. LSTM design -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>LSTM Design</span></div>
   <div class="content" style="top:94pt">
     <div class="row">
@@ -300,7 +300,7 @@ MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
 
 <!-- 8. Transformer design -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Transformer Design</span></div>
   <div class="content" style="top:94pt">
     <div class="row">
@@ -344,7 +344,7 @@ MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
 
 <!-- 9. Compute analysis -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Compute Analysis (Pre-Experiment)</span></div>
   <div class="content" style="top:94pt">
     <div class="row">
@@ -386,7 +386,7 @@ MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
 
 <!-- 10. Benchmark protocol -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Benchmarking + Evaluation Protocol</span></div>
   <div class="content" style="top:96pt">
     <div class="row">
@@ -421,7 +421,7 @@ MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
 
 <!-- 11. Timeline -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Project Timeline + Status</span></div>
 
   <!-- today marker: Oct 23 sits 4/7 of the way from Oct 19 (x=298) to Oct 26 (x=418) -->
@@ -462,7 +462,7 @@ MACs / clip    = T &middot; 4(d<sub>in</sub>h + h&sup2;)</div>
 
 <!-- 12. Repo + next steps -->
 <section class="slide">
-  <img class="bg" src="assets/bg.jpg"><img class="logo" src="assets/logo.png">
+  <img class="bg" src="bg.jpg"><img class="logo" src="logo.png">
   <div class="tab"><svg viewBox="0 0 329.1 36.8" preserveAspectRatio="none"><polygon points="0,0 313.3,0 329.1,15.8 329.1,36.8 15.8,36.8 0,21" fill="#233039"/></svg><span>Codebase + Next Steps</span></div>
   <div class="content" style="top:94pt">
     <div class="row">

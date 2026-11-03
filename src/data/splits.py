@@ -1,4 +1,4 @@
-"""Write the shared cross-validation splits. Spec: docs/design/data_pipeline.md section 4.
+"""Write the shared cross-validation splits. Spec: docs/data_pipeline.md section 4.
 
 Usage (from repo root):
     python -m src.data.splits --dataset oral            # seeds from configs/data.yaml (0, 1, 2)

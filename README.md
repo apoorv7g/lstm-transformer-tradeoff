@@ -69,7 +69,7 @@ Only 83 clips are Abnormal, so one test fold holds about 17 positives and its AU
 Repeated cross-validation and paired tests matter more than usual.
 
 Abnormal is treated as the positive class throughout. The data is private clinical material and
-**is not included in this repository**. Details: [data pipeline design](docs/design/data_pipeline.md).
+**is not included in this repository**. Details: [data pipeline design](docs/data_pipeline.md).
 
 ## Method
 
@@ -126,8 +126,8 @@ TensorFlow 2.17 / Keras 3.6.
 - For reference, the frozen MobileNetV2 backbone costs about 300 M MACs per frame.
 
 Design rationale, equations and training recipes:
-- [LSTM design](docs/design/lstm_design.md)
-- [Transformer design](docs/design/transformer_design.md)
+- [LSTM design](docs/lstm_design.md)
+- [Transformer design](docs/transformer_design.md)
 
 ### Evaluation
 
@@ -139,7 +139,7 @@ Design rationale, equations and training recipes:
 | Statistics | Corrected resampled t-test, 95% confidence intervals and effect sizes, TOST equivalence (margin 0.03 AUROC), McNemar and DeLong tests, Holm correction |
 | Hardware | Intel Core i5-12450H (8 cores, 12 threads), 16 GB RAM, Windows 11, no GPU |
 
-Full protocol: [benchmarking protocol](docs/design/benchmarking_protocol.md).
+Full protocol: [benchmarking protocol](docs/benchmarking_protocol.md).
 
 ## Getting started
 
@@ -172,7 +172,7 @@ pip install -r requirements.txt
 From the repository root:
 
 ```bash
-python -m scripts.model_summary
+python -m src.models.summary
 ```
 
 This builds every preset at T = 10, 20 and 40 and prints the parameter counts. They should match
@@ -183,8 +183,8 @@ the table above.
 Place the dataset locally. The `data/` directory is excluded from version control.
 
 ```
-data/raw/oral/labels.json
-data/raw/oral/video-*.mp4          (535 files)
+data/raw/labels.json
+data/raw/video-*.mp4          (535 files)
 ```
 
 ## Workflow
@@ -193,12 +193,12 @@ The study runs as a sequence of steps, each driven by a config file in `configs/
 
 | Step | Purpose | Command | Status |
 |---|---|---|---|
-| 1. Verify models | Build all presets and check parameter counts | `python -m scripts.model_summary` | Implemented |
+| 1. Verify models | Build all presets and check parameter counts | `python -m src.models.summary` | Implemented |
 | 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Implemented |
 | 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Implemented |
-| 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/runs/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Planned |
+| 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Planned |
 | 5. Benchmark | Measure latency, memory and FLOPs on CPU | `python -m src.benchmark.run_grid` | Planned |
-| 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `notebooks/analysis.ipynb` | Planned |
+| 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `src/benchmark/report.py` | Planned |
 
 Commands marked *Planned* show the intended interface. Those modules are not implemented yet.
 
@@ -217,25 +217,19 @@ Configuration files:
 lstm-transformer-tradeoff/
 ├── configs/                 Experiment configuration (data, LSTM, Transformer, benchmark)
 ├── data/                    Local only: raw/ (videos), features/ (cache), splits/ (fold IDs)
-├── docs/
-│   ├── 01_summary.md        Project summary
-│   ├── 02_abstract.md       Abstract (results to be filled in)
-│   ├── 03_scope.md          Research questions, hypotheses, scope, risks
-│   ├── 04_why_it_matters.md Motivation
-│   ├── design/              Data pipeline, LSTM, Transformer, benchmarking protocol
-│   ├── research/            Literature review, audit of the earlier LSTM baseline
-│   └── presentations/       Progress review slides (PDF and HTML source)
-├── notebooks/               Analysis notebooks
-├── results/                 Metrics and figures (model weights are not committed)
-├── scripts/                 Command-line utilities
+├── docs/                    All written documentation (summary, design, research)
+│   └── slides/              Progress review deck: PDF plus its HTML source
+├── results/                 One folder per training run (model weights are not committed)
 ├── src/
-│   ├── models/              Temporal heads: LSTM, Transformer, hybrid, shared head, registry
-│   ├── data/                Frame sampling, feature extraction, splits
+│   ├── data/                Frame sampling, feature extraction, splits, loaders
+│   ├── models/              LSTM, Transformer, hybrid, shared head, registry, param check
 │   ├── training/            Cross-validation training loop
-│   └── benchmark/           Latency, memory and FLOP measurement
-├── tests/                   Unit and regression tests
+│   └── benchmark/           Latency, memory and FLOP measurement, final report
+├── tests/                   Automated tests
 └── requirements.txt
 ```
+
+Every folder has its own `README.md` explaining what is inside and how to use it.
 
 ## Project status
 
@@ -249,7 +243,7 @@ lstm-transformer-tradeoff/
 | Paper and hybrid model (buffer) | Week of Nov 9 | Optional |
 
 Progress review slides:
-[docs/presentations/Progress_Review_2026-10-23_CacheMemory.pdf](docs/presentations/Progress_Review_2026-10-23_CacheMemory.pdf).
+[docs/slides/Progress_Review_2026-10-23_CacheMemory.pdf](docs/slides/Progress_Review_2026-10-23_CacheMemory.pdf).
 
 ## Scope and limitations
 
@@ -269,12 +263,12 @@ Progress review slides:
 | [Abstract](docs/02_abstract.md) | Structured abstract |
 | [Scope](docs/03_scope.md) | Research questions, hypotheses, deliverables, risks |
 | [Why it matters](docs/04_why_it_matters.md) | Clinical, computational and research motivation |
-| [Data pipeline](docs/design/data_pipeline.md) | Frame sampling, feature extraction, splits |
-| [LSTM design](docs/design/lstm_design.md) | Architecture, parameter and compute analysis, training recipe |
-| [Transformer design](docs/design/transformer_design.md) | Architecture, hybrid model, compute analysis |
-| [Benchmarking protocol](docs/design/benchmarking_protocol.md) | Measurement procedure and statistics |
-| [Literature review](docs/research/literature_review.md) | Related work with verification status |
-| [Baseline audit](docs/research/legacy_pipeline_audit.md) | Review of the earlier LSTM baseline and the fixes applied |
+| [Data pipeline](docs/data_pipeline.md) | Frame sampling, feature extraction, splits |
+| [LSTM design](docs/lstm_design.md) | Architecture, parameter and compute analysis, training recipe |
+| [Transformer design](docs/transformer_design.md) | Architecture, hybrid model, compute analysis |
+| [Benchmarking protocol](docs/benchmarking_protocol.md) | Measurement procedure and statistics |
+| [Literature review](docs/literature_review.md) | Related work with verification status |
+| [Baseline audit](docs/legacy_pipeline_audit.md) | Review of the earlier LSTM baseline and the fixes applied |
 
 ## Data and ethics
 

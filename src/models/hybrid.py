@@ -1,4 +1,4 @@
-"""Stretch goal: LSTM -> Transformer hybrid. See docs/design/transformer_design.md §Hybrid.
+"""Stretch goal: LSTM -> Transformer hybrid. See docs/transformer_design.md §Hybrid.
 
 The LSTM injects local order/recency information (so no positional embedding
 is needed), and a single attention block then lets every time step look at

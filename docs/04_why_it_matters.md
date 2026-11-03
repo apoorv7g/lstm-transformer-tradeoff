@@ -68,7 +68,7 @@ once, so they cannot attribute the difference.
 
 ## 4.4 The methodological reason: doing the comparison properly is itself a contribution
 
-Our audit of the previous LSTM pipeline (`docs/research/legacy_pipeline_audit.md`) found problems
+Our audit of the previous LSTM pipeline (`docs/legacy_pipeline_audit.md`) found problems
 that are common in student and early-stage medical-AI work:
 
 - ImageNet models fed with the wrong input scaling and channel order

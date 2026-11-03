@@ -1,4 +1,4 @@
-"""Uniform frame sampling from a video. Spec: docs/design/data_pipeline.md section 2.
+"""Uniform frame sampling from a video. Spec: docs/data_pipeline.md section 2.
 
 Why this is written the way it is (each point fixes a legacy DL_test1 bug):
 - Sequential decode with grab()/retrieve() instead of cap.set(POS_FRAMES): seeking in H.264 is

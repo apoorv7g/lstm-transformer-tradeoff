@@ -1,4 +1,4 @@
-"""Data pipeline. Spec: docs/design/data_pipeline.md.
+"""Data pipeline. Spec: docs/data_pipeline.md.
 
 - video_io.py: sample_frames(path, T) -> uint8 (T, 224, 224, 3) RGB + decode log
 - labels.py: labels.json -> ids / labels (Abnormal = 1) / ages

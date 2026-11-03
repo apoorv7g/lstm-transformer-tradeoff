@@ -1,6 +1,6 @@
-# Data + feature extraction config. See docs/design/data_pipeline.md.
+# Data + feature extraction config. See docs/data_pipeline.md.
 dataset: oral                     # the only dataset (ear dropped 3 Nov 2026)
-raw_dir: data/raw/oral            # labels.json + video-*.mp4 (copied from DL_test1/Task - 2 ORAL/oral)
+raw_dir: data/raw            # labels.json + video-*.mp4 (copied from DL_test1/Task - 2 ORAL/oral)
 features_dir: data/features
 splits_dir: data/splits
 

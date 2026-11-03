@@ -42,7 +42,7 @@ Environment (`venv`): Python 3.11.5, TensorFlow 2.17.0, Keras 3.6.0, OpenCV 4.10
 
 ## 2. What we reuse
 
-- **The data**: the oral set only, unchanged, copied into `data/raw/oral/`. The ear set was
+- **The data**: the oral set only, unchanged, copied into `data/raw/`. The ear set was
   dropped on 3 Nov 2026.
 - **The architecture idea**, kept exactly as our `lstm_base` preset:
   frozen MobileNetV2 → GAP → LSTM(256) → LSTM(128) → Dense(64) → Dropout(0.5) → sigmoid.

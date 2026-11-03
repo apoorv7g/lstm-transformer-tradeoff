@@ -1,4 +1,4 @@
-"""Cache frozen MobileNetV2 frame embeddings for every video. Spec: docs/design/data_pipeline.md section 3.
+"""Cache frozen MobileNetV2 frame embeddings for every video. Spec: docs/data_pipeline.md section 3.
 
 Usage (from repo root):
     python -m src.data.extract_features --dataset oral --frames 40
