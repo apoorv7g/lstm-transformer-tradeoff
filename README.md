@@ -225,7 +225,7 @@ Experiment flow (code ready, nothing run yet):
 | 3. Main pair, all folds | First answer to the main question (Transformer vs LSTM accuracy) | `python -m src.lstm --preset lstm_base --T 20 --seed 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0` | Pending |
 | 4. Full grid | Every model x T in {10, 20, 40} x seeds {0, 1} x 3 folds; overnight is fine. Completed runs are skipped, so re-running resumes | see the loop below | Pending |
 | 5. Benchmark grid | CPU latency, memory and FLOPs; run plugged in with nothing else open. Resumes if interrupted | `python -m src.common benchmark-all` | Pending |
-| 6. Statistics and report | `python -m src.common summary` writes `results/summary_*.csv` and the Markdown report `results/results_<folds>fold_T<T>.md` (all tables, corrected t-test and TOST against `lstm_base`, latency, per-run rows; hand-written findings are kept). DeLong, McNemar and Pareto plots are not written yet | `python -m src.common summary` | Partial |
+| 6. Statistics and report | `python -m src.common summary` writes `results/summary_*.csv` and the Markdown report `results/results_<folds>fold_T<T>.md` (all tables, corrected t-test and TOST against `lstm_base`, latency, per-run rows; hand-written findings are kept). `python -m src.common graphs` writes the Pareto and compute figures to `graphs/`. DeLong and McNemar are not written yet | `python -m src.common summary` then `python -m src.common graphs` | Partial |
 
 Full grid (step 4), PowerShell:
 
@@ -261,7 +261,8 @@ If something breaks mid-run, nothing is lost: each epoch is on disk as soon as i
 lstm-transformer-tradeoff/
 ├── src/                     The six code files (see the table above)
 ├── data/                    raw/ (videos, local only), features/ (cache, local only), splits/ (fold IDs)
-├── results/                 One folder per training run, benchmark files and summary CSVs
+├── results/                 One folder per training run, benchmark files, summary CSVs and the Markdown report
+├── graphs/                  Compute-vs-accuracy figures (PNG for slides, SVG for print), built by `python -m src.common graphs`
 ├── docs/                    All written documentation; slides/ holds the progress review deck
 ├── CacheMemory.pdf          Original proposal deck
 └── requirements.txt

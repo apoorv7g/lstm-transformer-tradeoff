@@ -22,7 +22,8 @@ This file's own commands (run from the repo root):
     python -m src.common splits                  # write data/splits/ear_seed{0,1,2}.json
     python -m src.common backbone --T 20         # MobileNetV2 + decode cost (end-to-end part)
     python -m src.common benchmark-all           # compute grid, one fresh process per model; resumable
-    python -m src.common summary                 # mean/sd tables from results/*.csv
+    python -m src.common summary                 # mean/sd tables + Markdown report from results/*.csv
+    python -m src.common graphs                  # compute-vs-accuracy figures -> graphs/
 """
 
 import argparse
@@ -1363,6 +1364,33 @@ def _macs_of(family, preset, num_frames):
     return module.macs(preset, num_frames)
 
 
+def paired_vs_reference(rows, presets, metric="metrics.test.auroc", reference=REFERENCE_PRESET):
+    """Corrected resampled t-test (Nadeau and Bengio) and TOST of each preset against the reference,
+    paired by (seed, fold). rows: completed runs of one T. Shared by the report and the graphs."""
+    from scipy import stats
+
+    f = lambda r, k: float(r[k]) if r.get(k) not in (None, "") else float("nan")
+    by = {(r["preset"], int(r["seed"]), int(r["fold"])): r for r in rows}
+    ratio = float(np.mean([f(r, "data.n_test") / (f(r, "data.n_train") + f(r, "data.n_val")) for r in rows]))
+    out = []
+    for p in presets:
+        if p == reference:
+            continue
+        d = np.array([f(by[k], metric) - f(by[(reference, k[1], k[2])], metric)
+                      for k in by if k[0] == p and (reference, k[1], k[2]) in by])
+        if len(d) < 2:
+            continue
+        n, se = len(d), d.std(ddof=1) * np.sqrt(1 / len(d) + ratio)
+        t95, t90 = stats.t.ppf(0.975, n - 1), stats.t.ppf(0.95, n - 1)
+        out.append({"preset": p, "n": n, "mean": float(d.mean()), "ratio": ratio,
+                    "ci95": (d.mean() - t95 * se, d.mean() + t95 * se),
+                    "ci90": (d.mean() - t90 * se, d.mean() + t90 * se),
+                    "p": float(2 * stats.t.sf(abs(d.mean() / se), n - 1)) if se > 0 else float("nan"),
+                    "equivalent": bool(d.mean() - t90 * se > -EQUIVALENCE_MARGIN
+                                       and d.mean() + t90 * se < EQUIVALENCE_MARGIN)})
+    return out
+
+
 def write_report(results_dir=RESULTS_DIR):
     """Write the readable Markdown report from runs.csv, summary_compute.csv and the benchmark files.
 
@@ -1371,8 +1399,6 @@ def write_report(results_dir=RESULTS_DIR):
     unchanged on every run; edit them in the report itself. Only completed default-variant runs
     are used.
     """
-    from scipy import stats
-
     results_dir = Path(results_dir)
     rows = [r for r in read_csv(results_dir / "runs.csv")
             if r.get("status") == "completed" and (r.get("variant") or "default") == "default"]
@@ -1395,7 +1421,6 @@ def write_report(results_dir=RESULTS_DIR):
     ms = lambda v, d=3: (f"{np.nanmean(v):.{d}f} +/- {np.nanstd(v, ddof=1):.{d}f}" if len(v) > 1
                          else f"{np.nanmean(v):.{d}f}")
     seeds = sorted({int(r["seed"]) for r in rows})
-    folds = sorted({int(r["fold"]) for r in rows})
     span = lambda k: (lambda v: f"{int(min(v))}" if min(v) == max(v) else f"{int(min(v))}–{int(max(v))}")(
         [f(r, k) for r in rows])
     comp = {(r["preset"], int(r["T"]), r["batch"], r["intra_threads"]): r
@@ -1440,7 +1465,6 @@ def write_report(results_dir=RESULTS_DIR):
         tr = [r for r in rows if int(r["T"]) == t]
         presets = [p for p in order if any(r["preset"] == p for r in tr)]
         family = {r["preset"]: r["family"] for r in tr}
-        by = {(r["preset"], int(r["seed"]), int(r["fold"])): r for r in tr}
         col = lambda p, k: [f(r, k) for r in tr if r["preset"] == p]
         sfx = f" (T = {t})"
 
@@ -1523,20 +1547,10 @@ def write_report(results_dir=RESULTS_DIR):
             w("")
             w("| Model | Pairs | Mean difference | 95% CI | p | 90% CI | Equivalent |")
             w("|---|---:|---:|---:|---:|---:|---|")
-            for p in presets:
-                if p == REFERENCE_PRESET:
-                    continue
-                d = np.array([f(by[k], "metrics.test.auroc") - f(by[(REFERENCE_PRESET, k[1], k[2])], "metrics.test.auroc")
-                              for k in by if k[0] == p and (REFERENCE_PRESET, k[1], k[2]) in by])
-                if len(d) < 2:
-                    continue
-                n, se = len(d), d.std(ddof=1) * np.sqrt(1 / len(d) + ratio)
-                t95, t90 = stats.t.ppf(0.975, n - 1), stats.t.ppf(0.95, n - 1)
-                pv = 2 * stats.t.sf(abs(d.mean() / se), n - 1) if se > 0 else float("nan")
-                lo, hi = d.mean() - t90 * se, d.mean() + t90 * se
-                eq = "Yes" if lo > -EQUIVALENCE_MARGIN and hi < EQUIVALENCE_MARGIN else "No (CI too wide)"
-                w(f"| `{p}` | {n} | {d.mean():+.4f} | [{d.mean() - t95 * se:+.3f}, {d.mean() + t95 * se:+.3f}] | "
-                  f"{pv:.2f} | [{lo:+.3f}, {hi:+.3f}] | {eq} |")
+            for c in paired_vs_reference(tr, presets):
+                eq = "Yes" if c["equivalent"] else "No (CI too wide)"
+                w(f"| `{c['preset']}` | {c['n']} | {c['mean']:+.4f} | [{c['ci95'][0]:+.3f}, {c['ci95'][1]:+.3f}] | "
+                  f"{c['p']:.2f} | [{c['ci90'][0]:+.3f}, {c['ci90'][1]:+.3f}] | {eq} |")
             w("")
 
         w(f"## Threshold metrics: accuracy, precision, recall, F1 and more{sfx}")
@@ -1608,6 +1622,275 @@ def write_report(results_dir=RESULTS_DIR):
     _replace(tmp, path)
     print(f"report -> {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")
     return path
+
+
+# Graphs ----------------------------------------------------------------------------------------
+
+GRAPHS_DIR = ROOT / "graphs"
+# Family colours from the slide template (validated for colour blindness). Orange and green are close
+# for red-blind readers, so every chart also uses a marker shape per family and names every point.
+# The pooling baselines are controls, not a model family, so they are a neutral grey.
+FAMILY_STYLE = {
+    "baseline": {"color": "#6B6B6B", "marker": "s", "label": "No-temporal baseline"},
+    "lstm": {"color": "#E69138", "marker": "o", "label": "LSTM"},
+    "transformer": {"color": "#3C78D8", "marker": "^", "label": "Transformer"},
+    "hybrid": {"color": "#6AA84F", "marker": "D", "label": "Hybrid (LSTM + attention)"},
+}
+_INK, _MUTED, _GRID = "#222222", "#595959", "#E5E5E5"
+
+
+def _graph_data(results_dir, num_frames):
+    """One record per preset at this T: accuracy (mean, sd over folds), compute, family."""
+    f = lambda r, k: float(r[k]) if r.get(k) not in (None, "") else float("nan")
+    rows = [r for r in read_csv(Path(results_dir) / "runs.csv") if r.get("status") == "completed"
+            and (r.get("variant") or "default") == "default" and int(r["T"]) == num_frames]
+    comp = {(r["preset"], r["batch"], r["intra_threads"]): r for r in read_csv(Path(results_dir) / "summary_compute.csv")
+            if int(r["T"]) == num_frames}
+    order = _preset_order()
+    presets = [p for p in order if any(r["preset"] == p for r in rows)]
+    data = {}
+    for p in presets:
+        rs = [r for r in rows if r["preset"] == p]
+        col = lambda k: np.array([f(r, k) for r in rs])
+        lat = lambda b, th: float(comp[(p, b, th)]["median_ms"]) if (p, b, th) in comp else float("nan")
+        data[p] = {"family": rs[0]["family"], "runs": len(rs),
+                   "auroc": col("metrics.test.auroc").mean(), "auroc_sd": col("metrics.test.auroc").std(ddof=1),
+                   "sens90": col("metrics.test.sens_at_spec90").mean(),
+                   "sens90_sd": col("metrics.test.sens_at_spec90").std(ddof=1),
+                   "lat1": lat("1", "1"), "lat8": lat("1", "8"),
+                   "macs": _macs_of(rs[0]["family"], p, num_frames), "params": int(rs[0]["model.params"])}
+    return rows, presets, data
+
+
+def _style_axes(ax):
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(_MUTED)
+    ax.tick_params(colors=_MUTED, labelsize=9)
+    ax.grid(True, color=_GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+
+
+def _family_legend(ax, families, loc="lower right"):
+    from matplotlib.lines import Line2D
+
+    handles = [Line2D([], [], linestyle="none", marker=FAMILY_STYLE[fam]["marker"], markersize=8,
+                      markerfacecolor=FAMILY_STYLE[fam]["color"], markeredgecolor="white",
+                      label=FAMILY_STYLE[fam]["label"]) for fam in FAMILY_STYLE if fam in families]
+    ax.legend(handles=handles, loc=loc, frameon=False, fontsize=9, labelcolor=_INK)
+
+
+def _pareto_front(points):
+    """Indices of the points no other point beats on both axes (lower x, higher y)."""
+    front = [i for i, (x, y) in enumerate(points)
+             if not any(x2 <= x and y2 >= y and (x2, y2) != (x, y) for x2, y2 in points)]
+    return sorted(front, key=lambda i: points[i][0])
+
+
+def _scatter(ax, data, xkey, ykey, sdkey, label_offsets=None):
+    """Points with sd error bars, a dashed Pareto front, and every point named."""
+    label_offsets = label_offsets or {}
+    presets = list(data)
+    pts = [(data[p][xkey], data[p][ykey]) for p in presets]
+    front = _pareto_front(pts)
+    ax.plot([pts[i][0] for i in front], [pts[i][1] for i in front], linestyle="--", linewidth=1.2,
+            color=_MUTED, zorder=1, label="_front")
+    for p, (x, y) in zip(presets, pts):
+        st = FAMILY_STYLE[data[p]["family"]]
+        ax.errorbar(x, y, yerr=data[p][sdkey], fmt="none", ecolor=st["color"], elinewidth=1.2, capsize=0,
+                    alpha=0.6, zorder=2)
+        ax.scatter(x, y, s=70, marker=st["marker"], color=st["color"], edgecolors="white", linewidths=1.5,
+                   zorder=3)
+        dx, dy = label_offsets.get(p, (7, 5))
+        ax.annotate(p, (x, y), xytext=(dx, dy), textcoords="offset points", fontsize=8.5, color=_INK,
+                    ha="center" if dx == 0 else "left" if dx > 0 else "right", va="center", zorder=4,
+                    bbox={"boxstyle": "round,pad=0.15", "facecolor": "white", "edgecolor": "none", "alpha": 0.85})
+    return front
+
+
+def plot_graphs(results_dir=RESULTS_DIR, out_dir=GRAPHS_DIR, num_frames=20):
+    """Write the compute-vs-accuracy figures (PNG for slides, SVG for print) to graphs/.
+
+    Built from the same files as the report (runs.csv, summary_compute.csv, benchmark/), so the
+    figures and the tables always agree. Rerun after `summary` whenever results change.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9, "axes.titlesize": 11,
+                         "axes.titleweight": "bold", "axes.titlecolor": _INK, "axes.labelcolor": _INK,
+                         "figure.facecolor": "white", "axes.facecolor": "white", "savefig.dpi": 200})
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows, _, data = _graph_data(results_dir, num_frames)
+    if not data:
+        print(f"no completed runs at T={num_frames}; no graphs written")
+        return []
+    families = {d["family"] for d in data.values()}
+    written = []
+
+    def save(fig, name):
+        for ext in ("png", "svg"):
+            fig.savefig(out_dir / f"{name}.{ext}", bbox_inches="tight")
+        plt.close(fig)
+        written.append(out_dir / f"{name}.png")
+
+    have_latency = all(np.isfinite(d["lat1"]) for d in data.values())
+    ref = data.get(REFERENCE_PRESET)
+    offsets = {"pool_max": (8, -9), "hybrid_base": (0, 12), "transformer_base": (0, -13),
+               "hybrid_lite": (-8, 7), "hybrid_attn": (8, 7), "lstm_base": (8, 7), "pool_mean": (8, 7)}
+    plain_ms = matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:g}")
+
+    def latency_axis(ax):
+        ax.set_xscale("log")
+        ax.xaxis.set_major_locator(matplotlib.ticker.FixedLocator([0.2, 0.3, 0.5, 1, 2, 3, 5]))
+        ax.xaxis.set_major_formatter(plain_ms)
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+
+    # 1. Main figure: accuracy vs measured CPU latency.
+    if have_latency:
+        fig, ax = plt.subplots(figsize=(7.2, 4.4))
+        _style_axes(ax)
+        if ref:
+            ax.axhspan(ref["auroc"] - EQUIVALENCE_MARGIN, ref["auroc"] + EQUIVALENCE_MARGIN, color="#F2F2F2",
+                       zorder=0)
+            ax.text(0.99, ref["auroc"] + EQUIVALENCE_MARGIN - 0.002, f"equivalence band: {REFERENCE_PRESET} "
+                    f"+/- {EQUIVALENCE_MARGIN}", transform=ax.get_yaxis_transform(), ha="right", va="top",
+                    fontsize=8, color=_MUTED)
+        _scatter(ax, data, "lat1", "auroc", "auroc_sd", offsets)
+        latency_axis(ax)
+        ax.set_xlabel("CPU latency per clip, temporal model + head (ms, batch 1, 1 thread, log scale)")
+        ax.set_ylabel("Test AUROC (mean, bars = sd over folds)")
+        ax.set_title(f"Accuracy vs compute: every model is equally accurate (T = {num_frames})", loc="left")
+        _family_legend(ax, families)
+        ax.text(0, -0.2, "Dashed line: Pareto front (no other model is both faster and more accurate). "
+                f"{len(rows)} runs, {N_FOLDS}-fold CV x {len({r['seed'] for r in rows})} seeds.",
+                transform=ax.transAxes, fontsize=8, color=_MUTED)
+        save(fig, "01_pareto_auroc_vs_latency")
+
+    # 2. Screening view: sensitivity at 90% specificity vs latency.
+    if have_latency:
+        fig, ax = plt.subplots(figsize=(7.2, 4.4))
+        _style_axes(ax)
+        _scatter(ax, data, "lat1", "sens90", "sens90_sd", offsets)
+        latency_axis(ax)
+        ax.set_xlabel("CPU latency per clip, temporal model + head (ms, batch 1, 1 thread, log scale)")
+        ax.set_ylabel("Sensitivity at 90% specificity (mean, bars = sd)")
+        ax.set_title(f"Screening view: Abnormal clips caught at 90% specificity (T = {num_frames})", loc="left")
+        _family_legend(ax, families)
+        ax.text(0, -0.2, "Share of Abnormal clips caught while only 1 in 10 Normal clips is flagged. "
+                "Differences are within fold noise (not significant).", transform=ax.transAxes, fontsize=8,
+                color=_MUTED)
+        save(fig, "02_pareto_sensitivity_vs_latency")
+
+    # 3. Hardware-independent compute: accuracy vs analytic MACs.
+    fig, ax = plt.subplots(figsize=(7.2, 4.4))
+    _style_axes(ax)
+    _scatter(ax, data, "macs", "auroc", "auroc_sd",
+             {**offsets, "hybrid_base": (0, 12), "transformer_base": (0, -13), "lstm_base": (8, 0)})
+    ax.set_xscale("log")
+    ax.set_xlabel("Multiply-accumulates per clip, temporal model + head (log scale)")
+    ax.set_ylabel("Test AUROC (mean, bars = sd)")
+    ax.set_title(f"Accuracy vs analytic compute (MACs, T = {num_frames})", loc="left")
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
+        lambda v, _: f"{v / 1e6:g} M" if v >= 1e6 else f"{v / 1e3:g} k"))
+    _family_legend(ax, families)
+    save(fig, "03_auroc_vs_macs")
+
+    # 4. Latency per model, 1 and 8 threads.
+    if have_latency:
+        order = sorted(data, key=lambda p: data[p]["lat1"])
+        fig, axes = plt.subplots(1, 2, figsize=(9, 3.8), sharey=True)
+        for ax, key, title in ((axes[0], "lat1", "1 thread"), (axes[1], "lat8", "8 threads")):
+            _style_axes(ax)
+            ax.grid(axis="y", visible=False)
+            vals = [data[p][key] for p in order]
+            colors = [FAMILY_STYLE[data[p]["family"]]["color"] for p in order]
+            ax.barh(range(len(order)), vals, color=colors, height=0.62, edgecolor="white", linewidth=2)
+            for i, v in enumerate(vals):
+                ax.text(v + max(vals) * 0.02, i, f"{v:.2f} ms", va="center", fontsize=8.5, color=_INK)
+            ax.set_title(f"Batch 1, {title}", loc="left", fontsize=10)
+            ax.set_xlim(0, max(vals) * 1.25)
+            ax.set_xlabel("ms per clip")
+        axes[0].set_yticks(range(len(order)), order, fontsize=9)
+        fig.suptitle(f"CPU latency of the temporal model + head (T = {num_frames}, median of 3 sessions)",
+                     x=0.01, ha="left", fontsize=11, fontweight="bold", color=_INK)
+        _family_legend(axes[1], families, loc="lower right")
+        fig.tight_layout()
+        save(fig, "04_latency_by_model")
+
+    # 5. End-to-end cost per clip: the shared front end dominates.
+    bb = [read_json(q) for q in BENCH_DIR.glob(f"mobilenetv2_backbone_T{num_frames}_*.json")]
+    bb = [b for b in bb if b]
+    comp = {(r["preset"], r["batch"], r["intra_threads"]): r for r in read_csv(Path(results_dir) / "summary_compute.csv")
+            if int(r["T"]) == num_frames}
+    if have_latency and bb and ("mobilenetv2_backbone", "1", "1") in comp:
+        decode = float(np.median([b["decode_ms_median"] for b in bb]))
+        prep = float(np.median([b["preprocess_ms_median"] for b in bb]))
+        backbone = float(comp[("mobilenetv2_backbone", "1", "1")]["median_ms"])
+        order = sorted(data, key=lambda p: data[p]["lat1"])
+        fig, ax = plt.subplots(figsize=(8.4, 4.0))
+        _style_axes(ax)
+        ax.grid(axis="y", visible=False)
+        parts = [("Decode video", decode, "#D9D9D9"), ("Preprocess", prep, "#BDBDBD"),
+                 ("MobileNetV2 backbone", backbone, "#9E9E9E")]
+        for i, p in enumerate(order):
+            left = 0.0
+            for name, v, c in parts:
+                ax.barh(i, v, left=left, color=c, height=0.62, edgecolor="white", linewidth=2,
+                        label=name if i == 0 else None)
+                left += v
+            st = FAMILY_STYLE[data[p]["family"]]
+            ax.barh(i, data[p]["lat1"], left=left, color=st["color"], height=0.62)
+            total = left + data[p]["lat1"]
+            share = 100 * data[p]["lat1"] / total
+            ax.text(total + 6, i, f"{total:.0f} ms (temporal model {data[p]['lat1']:.2f} ms, "
+                    f"{'<0.1' if share < 0.1 else f'{share:.1f}'}%)", va="center", fontsize=8, color=_INK)
+        ax.set_yticks(range(len(order)), order, fontsize=9)
+        ax.set_xlim(0, (decode + prep + backbone) * 1.55)
+        ax.set_xlabel("ms per clip, batch 1, 1 thread")
+        ax.set_title(f"End-to-end cost per clip: the temporal model is under 1% (T = {num_frames})", loc="left")
+        from matplotlib.patches import Patch
+
+        handles = [Patch(color=c, label=n) for n, _, c in parts] + [
+            Patch(color=FAMILY_STYLE[fam]["color"], label=f"Temporal model: {FAMILY_STYLE[fam]['label']}")
+            for fam in FAMILY_STYLE if fam in families]
+        ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.45, -0.16), ncol=3, frameon=False,
+                  fontsize=8, labelcolor=_INK)
+        save(fig, "05_end_to_end_breakdown")
+
+    # 6. Equivalence: AUROC difference to the reference with 90% CI and the TOST margin.
+    if ref:
+        cmp = paired_vs_reference(rows, list(data))
+        if cmp:
+            fig, ax = plt.subplots(figsize=(7.2, 3.9))
+            _style_axes(ax)
+            ax.grid(axis="y", visible=False)
+            ax.axvspan(-EQUIVALENCE_MARGIN, EQUIVALENCE_MARGIN, color="#F2F2F2", zorder=0)
+            ax.axvline(0, color=_MUTED, linewidth=1)
+            for i, c in enumerate(cmp):
+                st = FAMILY_STYLE[data[c["preset"]]["family"]]
+                ax.plot(c["ci90"], [i, i], color=st["color"], linewidth=2.2, solid_capstyle="round")
+                ax.scatter(c["mean"], i, s=60, marker=st["marker"], color=st["color"], edgecolors="white",
+                           linewidths=1.5, zorder=3)
+                verdict = "equivalent" if c["equivalent"] else "not shown equivalent"
+                ax.text(max(c["ci90"][1], EQUIVALENCE_MARGIN) + 0.004, i,
+                        f"{c['mean']:+.3f}  p = {c['p']:.2f}, {verdict}", va="center", fontsize=8, color=_INK)
+            ax.set_yticks(range(len(cmp)), [c["preset"] for c in cmp], fontsize=9)
+            ax.invert_yaxis()
+            ax.set_xlim(-0.06, 0.1)
+            ax.set_xlabel(f"Test AUROC minus {REFERENCE_PRESET} (mean of paired folds, line = 90% CI)")
+            ax.set_title(f"Equivalence with {REFERENCE_PRESET}: shaded band = +/- {EQUIVALENCE_MARGIN} AUROC "
+                         f"(T = {num_frames})", loc="left")
+            ax.text(0, -0.24, "Corrected resampled t-test (Nadeau and Bengio). A model is equivalent when its "
+                    "whole 90% CI lies inside the band (TOST).", transform=ax.transAxes, fontsize=8, color=_MUTED)
+            save(fig, "06_equivalence_vs_lstm")
+
+    print(f"{len(written)} graphs -> {out_dir.relative_to(ROOT) if out_dir.is_relative_to(ROOT) else out_dir}")
+    return written
 
 
 # =============================================================================================
@@ -1720,6 +2003,8 @@ def main(argv=None):
     p.add_argument("--presets", nargs="*", default=None, help="only these presets (default: all)")
     p.add_argument("--T", type=int, nargs="*", default=list(SEQUENCE_LENGTHS), choices=SEQUENCE_LENGTHS)
     sub.add_parser("summary", help="write results/summary_*.csv and the Markdown report")
+    p = sub.add_parser("graphs", help="write the compute-vs-accuracy figures to graphs/")
+    p.add_argument("--T", type=int, default=20, choices=SEQUENCE_LENGTHS)
     args = parser.parse_args(argv)
 
     if args.command == "backbone" or (args.command == "extract" and args.threads):
@@ -1736,6 +2021,8 @@ def main(argv=None):
                       presets=args.presets, sequence_lengths=tuple(args.T))
     elif args.command == "summary":
         summarise()
+    elif args.command == "graphs":
+        plot_graphs(num_frames=args.T)
 
 
 if __name__ == "__main__":

@@ -226,6 +226,14 @@ def test_report_keeps_handwritten_findings(tmp_path):
     assert mine in again and again.count(common.FINDINGS_START) == 1
 
 
+def test_graphs_build_from_results(tmp_path):
+    if not (common.RESULTS_DIR / "runs.csv").exists():
+        pytest.skip("no results yet")
+    written = common.plot_graphs(out_dir=tmp_path)
+    assert written and all(p.exists() and p.stat().st_size > 10_000 for p in written)
+    assert all((tmp_path / f"{p.stem}.svg").exists() for p in written)
+
+
 def test_upsert_csv_replaces_same_key(tmp_path):
     path = tmp_path / "x.csv"
     common.upsert_csv(path, {"run": "a", "v": 1}, key="run")
