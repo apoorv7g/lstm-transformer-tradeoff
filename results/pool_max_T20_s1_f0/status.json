@@ -1,0 +1,28 @@
+{
+  "run": "pool_max_T20_s1_f0",
+  "family": "baseline",
+  "preset": "pool_max",
+  "T": 20,
+  "seed": 1,
+  "fold": 0,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.001,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:28:22+00:00",
+  "updated_utc": "2026-11-03T17:28:30+00:00",
+  "pid": 20220,
+  "epochs_done": 25,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.9183946488294314,
+  "last_epoch": {
+    "loss": 0.4074932932853699,
+    "val_loss": 0.37395179271698,
+    "val_auc": 0.9170568585395813,
+    "val_auroc_exact": 0.9183946488294314,
+    "lr": 0.0002500000118743628
+  },
+  "finished_utc": "2026-11-03T17:28:29+00:00",
+  "test_auroc": 0.8898218061008758
+}

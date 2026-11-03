@@ -1,0 +1,28 @@
+{
+  "run": "hybrid_lite_T20_s0_f0",
+  "family": "hybrid",
+  "preset": "hybrid_lite",
+  "T": 20,
+  "seed": 0,
+  "fold": 0,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.0003,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:26:35+00:00",
+  "updated_utc": "2026-11-03T17:27:08+00:00",
+  "pid": 18096,
+  "epochs_done": 56,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.9237458193979934,
+  "last_epoch": {
+    "loss": 0.008824002929031849,
+    "val_loss": 0.447381854057312,
+    "val_auc": 0.8889632225036621,
+    "val_auroc_exact": 0.9210702341137125,
+    "lr": 9.375000445288606e-06
+  },
+  "finished_utc": "2026-11-03T17:27:08+00:00",
+  "test_auroc": 0.9010570824524313
+}

@@ -1,0 +1,28 @@
+{
+  "run": "hybrid_attn_T20_s0_f1",
+  "family": "hybrid",
+  "preset": "hybrid_attn",
+  "T": 20,
+  "seed": 0,
+  "fold": 1,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.0003,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:25:37+00:00",
+  "updated_utc": "2026-11-03T17:26:05+00:00",
+  "pid": 10804,
+  "epochs_done": 34,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.9050167224080268,
+  "last_epoch": {
+    "loss": 0.005224577151238918,
+    "val_loss": 1.0851393938064575,
+    "val_auc": 0.8561872839927673,
+    "val_auroc_exact": 0.8816053511705686,
+    "lr": 3.7500001781154424e-05
+  },
+  "finished_utc": "2026-11-03T17:26:05+00:00",
+  "test_auroc": 0.9195897560383541
+}

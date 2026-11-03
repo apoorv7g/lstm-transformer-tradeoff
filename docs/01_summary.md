@@ -23,20 +23,21 @@ clips, class imbalance. That is the question this project answers with numbers.
 
 ## What we are doing
 
-1. **One dataset, one task.** Binary Normal/Abnormal classification of pediatric **oral-cavity
-   screening videos**: 535 clips, 452 Normal / 83 Abnormal. They come from an existing curated pipeline (the
-   earlier `DL_test1` project, which already had a working MobileNetV2 + LSTM model).
+1. **One dataset, one task.** Binary Normal/Abnormal classification of pediatric **ear
+   (otoscopy) screening videos**: 874 clips, 643 Normal / 231 Abnormal. They come from an existing
+   curated pipeline (an earlier project that already had a working MobileNetV2 + LSTM model). The
+   dataset history is in `docs/data_pipeline.md`.
 2. **Freeze the spatial part.** Every frame goes through the same ImageNet MobileNetV2 and becomes a
    1280-d vector. We compute this once and cache it. The CNN is therefore identical for every
    model, so any difference comes from the temporal model alone.
 3. **Swap only the temporal block.** We build a small, deliberately designed set of models:
-   - LSTM family: `lstm_small`, `lstm_base` (the original DL_test1 head), `bilstm_base`
+   - LSTM family: `lstm_small`, `lstm_base` (the original legacy head), `bilstm_base`
    - Transformer family: `transformer_small`, `transformer_base` (parameter-matched to
      `lstm_base`), `transformer_deep`
    - Stretch goal: an **LSTM→Transformer hybrid**
 4. **Measure both axes on a CPU-only machine:**
-   - *Accuracy:* AUROC, macro-F1, balanced accuracy, sensitivity, specificity. Stratified 5-fold
-     CV, identical folds for every model.
+   - *Accuracy:* AUROC, macro-F1, balanced accuracy, sensitivity, specificity. Stratified 3-fold
+     CV with 2 seeds, identical folds for every model.
    - *Compute:* parameters, FLOPs/MACs, inference latency (batch 1 and batch 32, fixed thread
      counts), throughput, peak RAM, training time per epoch, model file size. Measured for the
      head alone **and** end-to-end including MobileNetV2.
@@ -63,21 +64,23 @@ smoke test on our laptop already pointed that way: in eager mode at T=20 the tra
 faster than the LSTMs. That is not yet a result, only a reason to measure carefully. See
 [04_why_it_matters.md](04_why_it_matters.md).
 
-## What already exists (23 Oct)
+## What already exists (3 Nov)
 
 - Done: Proposal and literature list (10 papers, now checked; see
   `docs/literature_review.md`)
-- Done: Full review of the legacy `DL_test1` LSTM code. It found real bugs that we fix here:
+- Done: Full review of the legacy LSTM code. It found real bugs that we fix here:
   - wrong MobileNetV2 input scaling and BGR channel order
   - data leakage in its confusion-matrix evaluation
   - non-stratified folds on imbalanced data
   - an approximately 21 GB float64 in-memory video tensor
 
   Details: `docs/legacy_pipeline_audit.md`.
-- Done: Model code for every preset (`src/models/`). All build under Keras 3.6 / TF 2.17, and their
-  parameter counts are checked.
+- Done: Model code for every preset (`src/lstm.py`, `src/transformer.py`, `src/hybrid.py`). All
+  build under Keras 3.6 / TF 2.17, and their parameter counts are checked.
 - Done: Design docs for the data pipeline, LSTM, Transformer and benchmarking protocol.
-- Next: feature extraction, then splits, then the training loop, then the benchmark harness.
+- Done: Frame sampling, the ear feature cache, the shared splits, the training loop and the
+  benchmark code (`src/common.py`).
+- Next: the first training runs on the ear set, then the full grid and the benchmark grid.
 
 ## Expected deliverables
 

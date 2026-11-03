@@ -1,0 +1,28 @@
+{
+  "run": "transformer_base_T20_s1_f1",
+  "family": "transformer",
+  "preset": "transformer_base",
+  "T": 20,
+  "seed": 1,
+  "fold": 1,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.0003,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:31:34+00:00",
+  "updated_utc": "2026-11-03T17:32:04+00:00",
+  "pid": 7556,
+  "epochs_done": 23,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.8729096989966555,
+  "last_epoch": {
+    "loss": 0.004763942677527666,
+    "val_loss": 1.1079840660095215,
+    "val_auc": 0.8127090930938721,
+    "val_auroc_exact": 0.8508361204013378,
+    "lr": 7.500000356230885e-05
+  },
+  "finished_utc": "2026-11-03T17:32:04+00:00",
+  "test_auroc": 0.9163126593033134
+}

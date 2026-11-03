@@ -1,0 +1,28 @@
+{
+  "run": "pool_mean_T20_s1_f2",
+  "family": "baseline",
+  "preset": "pool_mean",
+  "T": 20,
+  "seed": 1,
+  "fold": 2,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.001,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:28:09+00:00",
+  "updated_utc": "2026-11-03T17:28:17+00:00",
+  "pid": 6252,
+  "epochs_done": 34,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.9090301003344481,
+  "last_epoch": {
+    "loss": 0.28349706530570984,
+    "val_loss": 0.34908315539360046,
+    "val_auc": 0.9056856632232666,
+    "val_auroc_exact": 0.9056856187290969,
+    "lr": 0.0001250000059371814
+  },
+  "finished_utc": "2026-11-03T17:28:16+00:00",
+  "test_auroc": 0.9071489258405145
+}

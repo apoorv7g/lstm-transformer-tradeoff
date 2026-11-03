@@ -3,7 +3,8 @@
 This document is the contract for how every number in the final report is produced. If a
 measurement does not follow it, it does not go in the report.
 
-Code: `src/benchmark/` (planned). Config: `configs/benchmark.yaml`.
+Code: `src/common.py` (section 4 "Metrics", section 6 "Training", section 7 "Compute"). Settings:
+the `TRAINING` and `BENCHMARK` constants at the top of that file.
 
 ---
 
@@ -11,76 +12,81 @@ Code: `src/benchmark/` (planned). Config: `configs/benchmark.yaml`.
 
 | Axis | Values |
 |---|---|
-| Model | `lstm_small`, `lstm_base`, `bilstm_base`, `transformer_small`, `transformer_base`, `transformer_deep` (+ `hybrid_base` stretch) |
+| Model | `lstm_small`, `lstm_base`, `bilstm_base`, `transformer_small`, `transformer_base`, `transformer_deep`; hybrids `hybrid_base`, `hybrid_attn`, `hybrid_lite`; no-temporal controls `pool_mean`, `pool_max` |
 | Sequence length T | 10, 20, 40 |
-| CV | stratified 5-fold × seed 0 (mandatory), seeds 1 and 2 (if time) |
+| CV | stratified 3-fold × seeds 0 and 1 (6 paired fold scores per model) |
 
-- Seed 0 only: 6 × 3 × 5 = **90 training runs**. With all 3 seeds: 270.
-- Cached features make each run about seconds to minutes on CPU.
+- Per model and T: 2 seeds × 3 folds = 6 training runs. The 7 main models at T = 20: **42 runs**.
+- Cached features make each run seconds to minutes on CPU.
+- Commands: `python -m src.<baseline|lstm|transformer|hybrid> --T <T> --seed <s>` (all presets in the file,
+  all folds); completed runs are skipped, so the grid resumes.
 
 ## 2. Accuracy metrics (per outer fold, on the held-out test fold only)
 
-**Positive class = Abnormal.**
+**Positive class = Abnormal.** Each ear test fold holds 291–292 clips, 77 of them Abnormal.
 
 | Metric | Role |
 |---|---|
-| **AUROC** | **Primary.** Threshold-free and robust to the 85/15 imbalance |
+| **AUROC** | **Primary.** Threshold-free and robust to the 74/26 imbalance |
 | Macro-F1 | Secondary, at threshold 0.5 |
 | Balanced accuracy | Secondary |
+| **Sensitivity at 90% specificity** | **Main screening number.** Read off the test ROC curve: of the Abnormal clips, how many are caught while only 1 in 10 Normal clips is flagged. Missing an Abnormal clip is the costlier error |
+| Sensitivity and specificity at the high-sensitivity cut-off | Cut-off chosen on the inner validation set to reach 95% sensitivity, then applied unchanged to test. Shows how many Abnormal clips a deployable threshold still misses (`fn`) |
+| Specificity at 90% / 95% sensitivity | The price, in false alarms, of catching nearly every Abnormal clip |
 | Sensitivity (Abnormal recall) and specificity | Clinical reporting |
 | AUPRC | Supplementary (imbalance-aware) |
-| Accuracy | Reported for comparison with legacy results only. **Majority baseline = 84.5%** |
+| Accuracy | Reported for comparison with legacy results only. **Majority baseline = 73.6%** |
 
-Also store the out-of-fold probabilities for every video, for pooled ROC curves, McNemar's test and
-DeLong's test. Output per run goes to `results/{model}_T{T}_s{seed}_f{fold}/`:
-- `metrics.json`
-- `oof_predictions.csv`
-- `history.csv`
-- weights (`*.keras`, gitignored)
+Threshold metrics are reported at 0.5, at the Youden cut-off and at the 95%-sensitivity cut-off,
+both chosen on the inner validation set (never on test). Brier score, log loss, PPV, NPV and MCC are also stored. The probability for every video is
+saved, for pooled ROC curves, McNemar's test and DeLong's test. Output per run goes to
+`results/{preset}_T{T}_s{seed}_f{fold}/` (full list in `results/README.md`):
+- `run.json` (settings, environment, metrics)
+- `predictions.csv` (per video; not committed)
+- `history.csv`, `status.json`
+- `model.keras` (head weights; not committed)
 
 ## 3. Compute metrics
 
 | Metric | How | Notes |
 |---|---|---|
-| Parameters | `model.count_params()`; trainable vs non-trainable; head vs backbone | Exact |
-| MACs / FLOPs | (a) analytic formulas (`lstm_design.md` §2, `transformer_design.md` §5); (b) TF profiler on a frozen `tf.function` graph (`convert_variables_to_constants_v2_as_graph` + `tf.compat.v1.profiler` `float_operation`) | Report both. The profiler can under-count ops inside the LSTM `while_loop`. State MACs vs FLOPs (FLOPs ≈ 2 × MACs) |
-| **Inference latency** | Compiled `tf.function(model, reduce_retracing=True)` called with `training=False`; 50 warm-up calls; **≥ 300 timed calls** with `time.perf_counter()` | Report **median, p95, IQR**. Batch 1 (clinical per-video case) and batch 32 |
-| Throughput | clips/s = batch / median latency at batch 32 | |
-| Peak memory | Peak RSS via `psutil` (background sampler thread at 5 ms) during inference, minus the RSS baseline after model load | `tracemalloc` cannot see TF's C++ allocator, so use RSS |
-| Training cost | Seconds per epoch (Keras callback with `perf_counter`), epochs until early stop, total seconds per fold | Mean ± SD over folds |
-| Model size | Bytes of `.keras` file; also `.weights.h5` | Head only. Backbone is reported once (it is shared) |
-| End-to-end latency | Backbone per-frame latency × T (measured during extraction, batched) + head latency; also one true end-to-end graph `TimeDistributed(MobileNetV2) → head` at batch 1 for T = 20 | Shows the share of the head in the total |
+| Parameters | `model.count_params()`, also per layer | Exact |
+| MACs / FLOPs | Analytic formulas per family (`macs()` in each model file; `lstm_design.md` §2, `transformer_design.md` §5). FLOPs = 2 × MACs | A TF-profiler count is not implemented; the profiler can under-count ops inside the LSTM `while_loop` anyway |
+| **Inference latency** | Compiled `tf.function` calling the model with `training=False`, one per batch size; 50 warm-up calls; **300 timed calls** with `time.perf_counter()` | Report **median, p95, IQR** (the full percentile set is saved). Batch 1 (clinical per-video case) and batch 32 |
+| Throughput | clips/s = batch / median latency | |
+| Peak memory | Peak RSS via `psutil` (background sampler thread) while timing, plus RSS before and after building | `tracemalloc` cannot see TF's C++ allocator, so use RSS |
+| Training cost | Seconds per epoch, step-time percentiles, epochs until early stop, total fit seconds per fold | From the training logs; mean ± SD over folds |
+| Model size | Bytes of the head's `.keras` file | Head only. The backbone is reported once (it is shared) |
+| End-to-end latency | `python -m src.common backbone --T <T>`: MobileNetV2 on T frames at batch 1 (10 warm-up, 50 timed calls), plus decode and preprocessing time for 10 videos. Add this to the head's batch-1 latency | Shows the share of the head in the total |
 
 ### Thread configuration (fixed for every measurement)
 
 ```python
-import os
-os.environ["TF_NUM_INTRAOP_THREADS"] = str(k); os.environ["TF_NUM_INTEROP_THREADS"] = "1"
-os.environ["OMP_NUM_THREADS"] = str(k)
-import tensorflow as tf
 tf.config.threading.set_intra_op_parallelism_threads(k)
 tf.config.threading.set_inter_op_parallelism_threads(1)
 ```
 
 - Run with **k = 1** (single-core, embedded-like) and **k = 8** (all physical cores of the
   i5-12450H, which has 4 P-cores and 4 E-cores).
-- Threads must be set **before** TensorFlow executes any op, so the benchmark runs **each model in
-  a fresh Python process**. This also stops one model's memory from contaminating another's
-  measurement.
-- Record `TF_ENABLE_ONEDNN_OPTS` (default on in TF 2.17 on x86) in the run metadata.
+- Threads must be set **before** TensorFlow executes any op, so `python -m src.common
+  benchmark-all` runs **each job in a fresh Python process**. This also stops one model's memory
+  from contaminating another's measurement.
+- The grid (every preset × T × threads, plus the backbone) runs in a shuffled order and is repeated
+  in 3 sessions (`BENCHMARK["sessions"]`). Jobs whose result files exist are skipped, so the grid
+  resumes after an interruption.
 
 ### Machine hygiene checklist (before any timing session)
 
 - [ ] Laptop on AC power, Windows power mode **"Best performance"**, same mode every session
 - [ ] Close browsers, IDE indexing, OneDrive/sync, antivirus scans where possible
-- [ ] Note CPU temperature or just let it idle 2 min first. Run models in a **shuffled order**
-- [ ] Repeat the full timing grid in **3 separate sessions** (ideally after reboots); report the
-      median across sessions
+- [ ] Let the machine idle for 2 minutes first
+- [ ] Ideally reboot between the 3 sessions; report the median across sessions
 
 ### Environment metadata saved with every result
 
-CPU model, cores, threads, RAM, OS build, Python / TF / Keras / NumPy versions, thread settings,
-oneDNN flag, git commit hash, date and time, and power mode (entered manually).
+CPU model, physical and logical cores, CPU frequency, RAM, OS, Python / TF / Keras / NumPy /
+scikit-learn / OpenCV versions, thread settings, git commit (and whether the tree was dirty), the
+command line, and the time. Record the power mode by hand.
 
 ## 4. Head-only vs end-to-end
 
@@ -89,10 +95,10 @@ therefore always report two numbers:
 
 1. **Head-only**: input is cached `(B, T, 1280)` features. This isolates the architectural
    question (RQ2).
-2. **End-to-end**: video frames → backbone → head. This is the deployment answer (RQ4). Decoding
-   and resizing time are reported separately, not hidden.
+2. **End-to-end**: video decode + MobileNetV2 on T frames + head. This is the deployment answer
+   (RQ4). Decoding and preprocessing time are reported separately, not hidden.
 
-## 5. Statistics
+## 5. Statistics (to be implemented once results exist)
 
 All tests are paired by fold, since every model sees the identical split files.
 
@@ -100,8 +106,8 @@ All tests are paired by fold, since every model sees the identical split files.
    AUROC.
 2. **Corrected resampled t-test** (Nadeau & Bengio, 2003). A plain paired t-test on k-fold scores
    understates the variance because the training sets overlap. Use
-   `var_corrected = var(d) · (1/n + n_test/n_train)`, where n = number of fold scores (5 or 15).
-   With repeated CV (3 × 5) use the Bouckaert & Frank (2004) corrected repeated k-fold version.
+   `var_corrected = var(d) · (1/n + n_test/n_train)`, where n = number of fold scores (3 per seed, 6 in total)
+   and n_test/n_train ≈ 291/583 = 0.5. With repeated CV (2 × 3) use the Bouckaert & Frank (2004) corrected repeated k-fold version.
 3. **Effect size:** mean ΔAUROC with 95% CI (t-based and bootstrap), and Cohen's d_z.
 4. **Equivalence:** TOST with margin **Δ = 0.03 AUROC**, fixed now, before the results exist.
 5. **Wilcoxon signed-rank only with n ≥ 6 pairs.** With n = 5 the smallest attainable two-sided
@@ -115,10 +121,12 @@ All tests are paired by fold, since every model sees the identical split files.
 
 ## 6. Final outputs
 
-- `results/summary_accuracy.csv`: model × T, mean ± SD of every accuracy metric
-- `results/summary_compute.csv`: model × T × threads × batch, every compute metric
-- `results/stats.md`: every hypothesis test with statistic, p-value, CI and decision
-- Figures in `results/figures/`:
+- `results/summary_accuracy.csv`: model × T × variant, mean ± SD of the accuracy metrics
+  (`python -m src.common summary`)
+- `results/summary_compute.csv`: model × T × threads × batch, median over sessions
+  (`python -m src.common summary`)
+- Planned, not written yet: `results/stats.md` (every hypothesis test with statistic, p-value, CI
+  and decision) and figures:
   1. AUROC vs batch-1 latency (head-only), one panel per T, with Pareto front highlighted
   2. Latency vs T per model (k = 1 and k = 8)
   3. Same as (1) but end-to-end

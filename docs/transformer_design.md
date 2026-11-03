@@ -1,6 +1,7 @@
 # Design: Transformer Temporal Heads (+ Hybrid)
 
-Code: `src/models/transformer.py`, `src/models/hybrid.py`. Config: `configs/transformer.yaml`.
+Code: `src/transformer.py` (presets, `PositionalEmbedding`, `TransformerEncoderBlock`, recipe, MACs)
+and `src/hybrid.py`. Shared input, head and training loop: `src/common.py`.
 
 ---
 
@@ -30,7 +31,7 @@ We deliberately change four things:
 | No projection; tokens are raw 1024-d CNN features | `Dense(1280 → d_model)` projection | Lets us size the model independently of the backbone and parameter-match the LSTM. In the example, `key_dim = embed_dim = 1024`, so the 4 attention matrices hold about 4.2 M of its 4.23 M params |
 | `key_dim = embed_dim` per head | `key_dim = d_model / num_heads` | Standard multi-head split, so params do not depend on the head count |
 | Post-LN (`x = LN(x + f(x))`) | **Pre-LN** (`x = x + f(LN(x))`) plus a final LN | Trains more stably without warm-up gymnastics on small data |
-| `GlobalMaxPooling1D` | `GlobalAveragePooling1D` (max available as an option) | Lower variance on small data; a CLS token would be one more thing to learn from ~360 clips |
+| `GlobalMaxPooling1D` | `GlobalAveragePooling1D` (max available as an option) | Lower variance on small data; a CLS token would be one more thing to learn from ~600 clips |
 | FFN width 4 (a bottleneck) | FFN = 2 × d_model, GELU | Conventional width |
 
 Positional encoding: **learned** absolute embeddings (T × d params), as in the Keras example and
@@ -75,7 +76,9 @@ Extras:
 | `transformer_small` | 128 | 4 | 256 | 2 | 438,785 | 440,065 | 442,625 | Cheapest attention model |
 | `transformer_base` | 256 | 4 | 512 | 2 | 1,401,729 | 1,404,289 | 1,409,409 | **Parameter-matched** to `lstm_base` (1.40 M vs 1.78 M) |
 | `transformer_deep` | 256 | 8 | 512 | 4 | 2,455,937 | 2,458,497 | 2,463,617 | Does depth buy accuracy? |
-| `hybrid_base` | 128 (LSTM) | 4 | 256 | 1 | 862,465 | 862,465 | 862,465 | Stretch: LSTM(128,seq) → 1 block |
+| `hybrid_base` | 128 (LSTM) | 4 | 256 | 1 | 862,465 | 862,465 | 862,465 | LSTM(128,seq) → 1 block → mean pool |
+| `hybrid_attn` | 128 | 4 | 256 | 1 | 444,930 | 444,930 | 444,930 | Dense(128) → LSTM(128) → 1 block → attention + max pool |
+| `hybrid_lite` | 64 | 2 | 128 | 1 | 156,994 | 156,994 | 156,994 | Dense(64) → LSTM(64) → 1 block → attention + max pool |
 
 Parameters grow slightly with T, only through the learned positional table (T·d).
 
@@ -92,9 +95,12 @@ Analytic MACs per clip, counting matmuls only:
 | Preset | T=10 | T=20 | T=40 | of which attention-score (T²) at T=40 |
 |---|---:|---:|---:|---:|
 | `transformer_small` | 4.3 M | 8.7 M | 17.9 M | 0.8 M (4.6%) |
-| `transformer_base` | 13.9 M | 27.9 M | 56.7 M | 1.6 M (2.9%) |
+| `transformer_base` | 13.9 M | 28.0 M | 56.7 M | 1.6 M (2.9%) |
 | `transformer_deep` | 24.5 M | 49.3 M | 100.3 M | 3.3 M (3.3%) |
-| `hybrid_base` | 8.5 M | 17.1 M | 34.5 M | 0.4 M |
+| `hybrid_base` | 8.6 M | 17.2 M | 34.5 M | 0.4 M |
+| `hybrid_attn` | 4.3 M | 8.6 M | 17.5 M | 0.4 M |
+| `hybrid_lite` | 1.5 M | 3.0 M | 6.1 M | 0.2 M |
+| *cf.* `pool_mean` / `pool_max` (no temporal block) | 0.08 M | 0.08 M | 0.08 M | n/a |
 | *cf.* `lstm_base` | 17.7 M | 35.4 M | 70.8 M | n/a |
 | *cf.* MobileNetV2 backbone (≈300 M per frame) | ≈3.0 G | ≈6.0 G | ≈12.0 G | n/a |
 
@@ -103,7 +109,7 @@ Takeaways for the write-up:
 1. **The T² term crosses the linear terms only when T > 2d + d_ff**, which is 512 frames at
    d = 128 and 1024 at d = 256. Our T ≤ 40 is far below that.
 2. At matched parameters, the Transformer does **fewer** MACs per clip than the LSTM
-   (27.9 M vs 35.4 M at T = 20).
+   (28.0 M vs 35.4 M at T = 20).
 3. More importantly for CPU **latency**:
    - The Transformer's work is a handful of large GEMMs with no dependency across time.
    - The LSTM's work is T dependent small GEMVs.
@@ -117,8 +123,8 @@ Takeaways for the write-up:
 | Setting | Value | Differs from LSTM? |
 |---|---|---|
 | Loss / labels / class weights / batch / max epochs / early stopping / seeds | **identical** to `lstm_design.md` §5 | No |
-| Optimiser | AdamW, lr 3e-4, weight_decay 1e-2 (excluding LN and bias if easy), `clipnorm=1.0` | Yes. Standard Transformer recipe |
-| LR schedule | linear warm-up for 5 epochs, then ReduceLROnPlateau as for the LSTM | Yes. Warm-up is standard for attention |
+| Optimiser | AdamW, lr 3e-4, weight_decay 1e-2 (bias, LayerNorm and embeddings excluded), `clipnorm=1.0` | Yes. Standard Transformer recipe |
+| LR schedule | linear warm-up for 5 epochs (`LinearWarmup` callback), then ReduceLROnPlateau as for the LSTM | Yes. Warm-up is standard for attention |
 | Dropout | 0.1 in embedding, attention and FFN; 0.5 in the shared head | n/a |
 
 **Fairness argument.** Each family gets its *conventional* optimiser and the *same* epoch budget,
@@ -126,7 +132,11 @@ stopping rule and LR-sensitivity check (lr ∈ {1e-3, 3e-4} on seed-0 inner vali
 Adam(1e-3) on a Transformer would handicap it, so that would not be fair either. The paper should
 state this choice explicitly.
 
-## 7. Hybrid (stretch goal, `hybrid_base`)
+## 7. Hybrids (`src/hybrid.py`) and the no-temporal baselines (`src/baseline.py`)
+
+All hybrids use the Transformer recipe (they contain attention).
+
+### 7.1 `hybrid_base`
 
 `LSTM(128, return_sequences=True) → TransformerEncoderBlock(d=128, 4 heads, d_ff=256) × 1 → LN → mean-pool → head`
 
@@ -138,13 +148,39 @@ state this choice explicitly.
 - The literature has related designs, though not identical ones: TSTNet uses a Swin spatial
   encoder with an LSTM, and 3DTransLSTM interleaves the two.
 
+### 7.2 `hybrid_attn` and `hybrid_lite` (attention-pooling hybrids)
+
+`Dense(1280 → d) → LSTM(d, return_sequences=True) → TransformerEncoderBlock(d) × 1 → LN →
+[AttentionPooling ‖ GlobalMaxPooling] → head`, with d = 128 (`hybrid_attn`) or 64 (`hybrid_lite`).
+
+Designed around what the task looks like: the Abnormal finding is mainly a matter of how the canal
+looks, and it may be visible in only some frames as the camera moves.
+
+- **Project first.** Shrinking each frame to d before the LSTM makes every LSTM step cost
+  `4·d·2d` instead of `4·h·(1280 + h)`. This is why `hybrid_attn` costs half of `hybrid_base`.
+- **LSTM** gives local context and order, so no positional embedding is needed.
+- **One attention block** lets each frame compare itself with every other frame.
+- **Attention pooling** (`softmax_t(w·x_t + b)`, weighted sum) learns which frames matter.
+  **Max pooling** keeps strong evidence from a single frame. Mean pooling, used by the other
+  models, dilutes a finding that appears in a few frames only.
+- `hybrid_lite` is the same design at d = 64, aimed at the low-compute end of the Pareto front.
+
+### 7.3 No-temporal baselines (`pool_mean`, `pool_max`)
+
+`mean (or max) over frames → shared head`; 82,049 parameters at any T, Adam recipe.
+
+These ignore frame order completely. If a temporal model does not beat them by more than the
+equivalence margin, temporal modelling adds nothing on this task and the cheapest model wins.
+They are controls, not competitors in the H₀-acc test (which stays `transformer_base` vs
+`lstm_base`).
+
 ## 8. Expected behaviour / what to watch
 
 - Small data plus attention gives a high variance across folds. Expect a larger SD than the LSTM.
-  Repeated CV (3 seeds) matters most here.
+  Repeated CV (2 seeds) matters most here.
 - If `transformer_deep` ≤ `transformer_base` on AUROC, that supports "capacity is not the
   bottleneck", which is consistent with H₀.
 - Inspect attention maps for a few clips (mean over heads). Do they focus on a few frames, for
-  example when the relevant part of the mouth is in view? This is a qualitative figure for the presentation.
+  example when the eardrum is in view? This is a qualitative figure for the presentation.
 - Smoke test (eager, batch 1, T = 20; **not a result**): `transformer_small` ≈ 116 ms,
   `transformer_base` ≈ 130 ms, `transformer_deep` ≈ 217 ms, `hybrid_base` ≈ 245 ms.

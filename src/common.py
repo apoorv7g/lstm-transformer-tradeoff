@@ -18,8 +18,8 @@ one epoch at a time. If a run dies, its files stay on disk; the next attempt mov
 <run>/attempts/attempt<N>_<status>/ and starts new files.
 
 This file's own commands (run from the repo root):
-    python -m src.common extract                 # build data/features/oral_T40.npz (about 4 min)
-    python -m src.common splits                  # write data/splits/oral_seed{0,1,2}.json
+    python -m src.common extract                 # build data/features/ear_T40.npz (about 6 min)
+    python -m src.common splits                  # write data/splits/ear_seed{0,1,2}.json
     python -m src.common backbone --T 20         # MobileNetV2 + decode cost (end-to-end part)
     python -m src.common benchmark-all           # compute grid, one fresh process per model; resumable
     python -m src.common summary                 # mean/sd tables from results/*.csv
@@ -56,23 +56,23 @@ import psutil
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"                # labels.json + video-*.mp4 (never committed)
-FEATURES_DIR = ROOT / "data" / "features"      # oral_T40.npz (never committed)
-SPLITS_DIR = ROOT / "data" / "splits"          # oral_seed{0,1,2}.json (IDs only, committed)
+FEATURES_DIR = ROOT / "data" / "features"      # ear_T40.npz (never committed)
+SPLITS_DIR = ROOT / "data" / "splits"          # ear_seed{0,1,2}.json (IDs only, committed)
 RESULTS_DIR = ROOT / "results"
 BENCH_DIR = RESULTS_DIR / "benchmark"
 LOG_DIR = RESULTS_DIR / "logs"                 # one console log per command (not committed)
 
-DATASET = "oral"
+DATASET = "ear"
 NORMAL_VALUE = "Normal"                        # anything else is Abnormal = 1
 
 CACHE_FRAMES = 40                              # extract once; T = 20 is [:, ::2], T = 10 is [:, ::4]
 SEQUENCE_LENGTHS = (10, 20, 40)
 FRAME_SIZE = (224, 224)
 FEATURE_DIM = 1280                             # MobileNetV2 global-average-pooled output
-MAX_CONSECUTIVE_FAILURES = 25                  # video-487 has one corrupt packet; keep this
+MAX_CONSECUTIVE_FAILURES = 25                  # tolerate a corrupt packet mid-file; keep this
 
-SEEDS = (0, 1, 2)
-N_FOLDS = 5
+SEEDS = (0, 1)
+N_FOLDS = 3
 VAL_FRACTION = 0.15
 
 # Shared by both families. Each model file adds its own optimiser settings (RECIPE).
@@ -82,7 +82,7 @@ TRAINING = dict(
     batch_size=32,
     max_epochs=100,
     clipnorm=1.0,
-    early_stopping_patience=15,                # on val_auc, best weights restored
+    early_stopping_patience=15,                # on exact val AUROC, best weights restored
     plateau_factor=0.5,
     plateau_patience=5,
     warmup_epochs=0,
@@ -97,7 +97,13 @@ BENCHMARK = dict(
     sessions=3,
 )
 
-FAMILIES = ("lstm", "transformer", "hybrid")   # module names in src/
+FAMILIES = ("baseline", "lstm", "transformer", "hybrid")   # module names in src/
+
+# Screening priority: missing an Abnormal clip costs more than a false alarm. Every run reports
+# sensitivity at a fixed 90% specificity (read off the ROC curve) and an operating point whose
+# cut-off is chosen on the inner val set to reach 95% sensitivity, then applied unchanged to test.
+FIXED_SPECIFICITY = 0.90
+HIGH_SENSITIVITY_TARGET = 0.95
 
 
 # =============================================================================================
@@ -203,7 +209,7 @@ def preprocess(frames_uint8):
 
 
 def extract_features(frames=CACHE_FRAMES, limit=None, workers=4, overwrite=False):
-    """Cache frozen MobileNetV2 embeddings of every video to data/features/oral_T{frames}.npz.
+    """Cache frozen MobileNetV2 embeddings of every video to data/features/ear_T{frames}.npz.
 
     Extract once: the backbone is frozen and nothing is augmented, so running it inside every model
     on every epoch gives identical outputs at about 100x the cost. Videos decode in a thread pool
@@ -299,7 +305,7 @@ def make_split(ids, labels, seed, n_splits=N_FOLDS, val_fraction=VAL_FRACTION):
 
 
 def write_splits(seeds=SEEDS):
-    """Write data/splits/oral_seed{s}.json. Every model reads the same files (paired comparison)."""
+    """Write data/splits/ear_seed{s}.json. Every model reads the same files (paired comparison)."""
     table = load_labels()
     SPLITS_DIR.mkdir(parents=True, exist_ok=True)
     label_of = dict(zip(table["ids"].tolist(), table["labels"].tolist()))
@@ -411,8 +417,40 @@ def youden_threshold(y_true, y_prob):
     return float(np.clip(thr[int(np.argmax(tpr - fpr))], 0.0, 1.0))
 
 
-def evaluate(y_true, y_prob, youden=None):
-    """AUROC (primary), AUPRC, Brier, log loss, and threshold scores at 0.5 (and Youden if given).
+def sensitivity_threshold(y_true, y_prob, target=HIGH_SENSITIVITY_TARGET):
+    """Highest cut-off whose sensitivity reaches target. Chosen on val, never on test, so the
+    test sensitivity it gives is an honest estimate (it can land below target on new clips)."""
+    from sklearn.metrics import roc_curve
+
+    y_true = np.asarray(y_true).astype(int)
+    if y_true.min() == y_true.max():
+        return 0.5
+    fpr, tpr, thr = roc_curve(y_true, y_prob)
+    return float(np.clip(thr[int(np.argmax(tpr >= target))], 0.0, 1.0))
+
+
+def roc_operating_points(y_true, y_prob):
+    """Sensitivity at fixed specificity and specificity at fixed sensitivity, read off this set's
+    own ROC curve (threshold-free summaries, like AUROC). Sensitivity at 90% specificity is the
+    headline screening number: of the Abnormal clips, how many are caught while only 1 in 10
+    Normal clips is flagged."""
+    from sklearn.metrics import roc_curve
+
+    y_true = np.asarray(y_true).astype(int)
+    if y_true.min() == y_true.max():
+        return {"sens_at_spec90": float("nan"), "spec_at_sens90": float("nan"),
+                "spec_at_sens95": float("nan")}
+    fpr, tpr, _ = roc_curve(y_true, y_prob)
+    spec = 1 - fpr
+    best = lambda vals, ok: float(vals[ok].max()) if ok.any() else 0.0
+    return {"sens_at_spec90": best(tpr, spec >= FIXED_SPECIFICITY - 1e-12),
+            "spec_at_sens90": best(spec, tpr >= 0.90 - 1e-12),
+            "spec_at_sens95": best(spec, tpr >= 0.95 - 1e-12)}
+
+
+def evaluate(y_true, y_prob, youden=None, high_sens=None):
+    """AUROC (primary), AUPRC, Brier, log loss, sensitivity at 90% specificity, and threshold scores
+    at 0.5 (plus the val-chosen Youden and high-sensitivity cut-offs if given).
 
     Ranking metrics use the raw probabilities; only log loss sees clipped values, because clipping
     would merge saturated predictions into ties and change the AUROC.
@@ -432,10 +470,13 @@ def evaluate(y_true, y_prob, youden=None):
         "log_loss": float(log_loss(y_true, np.clip(y_prob, 1e-7, 1 - 1e-7), labels=[0, 1])),
         "mean_prob_abnormal": float(y_prob[y_true == 1].mean()) if y_true.any() else float("nan"),
         "mean_prob_normal": float(y_prob[y_true == 0].mean()) if (y_true == 0).any() else float("nan"),
+        **roc_operating_points(y_true, y_prob),
         "at_0.5": threshold_metrics(y_true, y_prob, 0.5),
     }
     if youden is not None:
         out["at_youden"] = threshold_metrics(y_true, y_prob, youden)
+    if high_sens is not None:
+        out["at_high_sens"] = threshold_metrics(y_true, y_prob, high_sens)
     return out
 
 
@@ -472,6 +513,20 @@ def _fsync(fh):
         pass
 
 
+def _replace(tmp, path, attempts=20, wait=0.1):
+    """os.replace with retries. On Windows a virus scanner, the search indexer or an editor can hold
+    the target open for a moment, and the rename then fails with PermissionError (seen on 3 Nov:
+    one run lost its final status write this way). Waits up to about 2 s before giving up."""
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if i == attempts - 1:
+                raise
+            time.sleep(wait)
+
+
 def write_json(path, obj, indent=2):
     """Atomic write (temp file + rename), so a crash never leaves a half-written JSON file."""
     path = Path(path)
@@ -480,7 +535,7 @@ def write_json(path, obj, indent=2):
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(_plain(obj), fh, indent=indent)
         _fsync(fh)
-    os.replace(tmp, path)
+    _replace(tmp, path)
 
 
 def read_json(path, default=None):
@@ -504,7 +559,7 @@ def write_csv(path, rows):
         writer.writeheader()
         writer.writerows([_plain(r) for r in rows])
         _fsync(fh)
-    os.replace(tmp, path)
+    _replace(tmp, path)
 
 
 def append_csv_row(path, row):
@@ -790,12 +845,17 @@ def _callbacks(recipe, learning_rate, out_dir, status, x_val, y_val, events_root
             probs = self.model.predict(x_val, batch_size=256, verbose=0).ravel()
             predict_s = time.perf_counter() - t0
             exact = evaluate(y_val, probs)
+            if logs is not None:
+                # Early stopping and the LR plateau read this key. Keras's own val_auc is a
+                # 200-threshold approximation that drifts badly when predictions bunch together.
+                logs["val_auroc_exact"] = exact["auroc"]
             steps = np.array(self._steps) if self._steps else np.array([np.nan])
             weights = self.model.trainable_weights
             row = {"epoch": epoch + 1, "lr": self._lr}
             row.update({k: float(v) for k, v in (logs or {}).items() if k not in ("learning_rate", "lr")})
             row.update({
                 "val_auroc_exact": exact["auroc"], "val_auprc_exact": exact["auprc"],
+                "val_sens_at_spec90": exact["sens_at_spec90"],
                 "val_brier": exact["brier"], "val_log_loss_exact": exact["log_loss"],
                 "val_sensitivity_0.5": exact["at_0.5"]["sensitivity"],
                 "val_specificity_0.5": exact["at_0.5"]["specificity"],
@@ -819,24 +879,29 @@ def _callbacks(recipe, learning_rate, out_dir, status, x_val, y_val, events_root
             append_csv_row(out_dir / "history.csv", row)
             self.val_probs.append(probs.astype(np.float32))
             np.save(out_dir / "val_probs_per_epoch.npy", np.stack(self.val_probs))
-            self.best = max(self.best, row.get("val_auc", -np.inf))
-            status.update(epochs_done=epoch + 1, best_val_auc_so_far=self.best,
-                          last_epoch={k: row.get(k) for k in ("loss", "val_loss", "val_auc", "lr")})
+            self.best = max(self.best, row.get("val_auroc_exact", -np.inf))
+            status.update(epochs_done=epoch + 1, best_val_auroc_exact_so_far=self.best,
+                          last_epoch={k: row.get(k) for k in ("loss", "val_loss", "val_auc",
+                                                              "val_auroc_exact", "lr")})
             log_event(events_root, "epoch_end", run=out_dir.name, epoch=epoch + 1, loss=row.get("loss"),
-                      val_loss=row.get("val_loss"), val_auc=row.get("val_auc"), lr=self._lr,
+                      val_loss=row.get("val_loss"), val_auc=row.get("val_auc"),
+                      val_auroc_exact=row.get("val_auroc_exact"), lr=self._lr,
                       epoch_seconds=row["epoch_seconds"])
 
-    early = keras.callbacks.EarlyStopping(monitor="val_auc", mode="max", restore_best_weights=True,
+    # EpochLog must come before EarlyStopping and ReduceLROnPlateau: it puts val_auroc_exact
+    # into the shared logs dict that they monitor.
+    log = EpochLog()
+    early = keras.callbacks.EarlyStopping(monitor="val_auroc_exact", mode="max", restore_best_weights=True,
                                           patience=recipe["early_stopping_patience"])
     callbacks = [
+        log,
         early,
-        keras.callbacks.ReduceLROnPlateau(monitor="val_auc", mode="max", factor=recipe["plateau_factor"],
+        keras.callbacks.ReduceLROnPlateau(monitor="val_auroc_exact", mode="max",
+                                          factor=recipe["plateau_factor"],
                                           patience=recipe["plateau_patience"]),
     ]
     if recipe["warmup_epochs"]:
         callbacks.insert(0, LinearWarmup())
-    log = EpochLog()
-    callbacks.append(log)
     return callbacks, log, early
 
 
@@ -903,8 +968,10 @@ def train_fold(build, family, preset, num_frames, seed, fold, data, idx, recipe,
 
         status.update(phase="saving")
         youden = youden_threshold(y[va], probs["val"])
+        high_sens = sensitivity_threshold(y[va], probs["val"])
         val_aucs = [r.get("val_auc", float("nan")) for r in log.rows]
-        best_epoch = int(np.nanargmax(val_aucs)) + 1 if log.rows else 0
+        exact_aucs = [r.get("val_auroc_exact", float("nan")) for r in log.rows]
+        best_epoch = int(np.nanargmax(exact_aucs)) + 1 if log.rows else 0
         col = lambda k: [r[k] for r in log.rows]
         step_ms = [r["step_ms_median"] for r in log.rows]
         model.save(out_dir / "model.keras")
@@ -922,7 +989,8 @@ def train_fold(build, family, preset, num_frames, seed, fold, data, idx, recipe,
             "training": {
                 "epochs_run": len(log.rows), "best_epoch": best_epoch,
                 "stopped_early": bool(early.stopped_epoch),
-                "best_val_auc": float(np.nanmax(val_aucs)) if log.rows else None,
+                "best_val_auc": best_row.get("val_auc"),
+                "best_val_auc_keras_max": float(np.nanmax(val_aucs)) if log.rows else None,
                 "best_val_auroc_exact": best_row.get("val_auroc_exact"),
                 "best_val_loss": best_row.get("val_loss"),
                 "train_loss_at_best": best_row.get("loss"),
@@ -943,13 +1011,16 @@ def train_fold(build, family, preset, num_frames, seed, fold, data, idx, recipe,
                        "rss_increase_mb": round(mem.peak_mb - mem.start_mb, 1)},
             "inference_ms_per_clip_batch256": {k: round(v, 4) for k, v in predict_ms.items()},
             "youden_threshold_from_val": youden,
-            "metrics": {part: evaluate(y[rows], probs[part], youden)
+            "high_sensitivity_threshold_from_val": high_sens,
+            "high_sensitivity_target": HIGH_SENSITIVITY_TARGET,
+            "metrics": {part: evaluate(y[rows], probs[part], youden, high_sens)
                         for part, rows in (("test", te), ("val", va), ("train", tr))},
             "environment": environment(),
         }
         write_csv(out_dir / "predictions.csv", [
             {"id": str(ids[i]), "part": part, "label": int(y[i]), "prob": float(p),
              "pred_0.5": int(p >= 0.5), "pred_youden": int(p >= youden),
+             "pred_high_sens": int(p >= high_sens),
              "preset": preset, "T": num_frames, "seed": seed, "fold": fold, "variant": variant}
             for part, rows in (("test", te), ("val", va), ("train", tr))
             for i, p in zip(rows, probs[part])
@@ -1148,7 +1219,7 @@ def benchmark_backbone(num_frames=20, n_videos=10, session=0, warmup=10, timed=5
 
 
 def benchmark_jobs(families=FAMILIES, sequence_lengths=SEQUENCE_LENGTHS, threads=BENCHMARK["threads"],
-                   sessions=BENCHMARK["sessions"], backbone=True):
+                   sessions=BENCHMARK["sessions"], backbone=True, presets=None):
     """Every (command, expected output files) pair of the grid, shuffled within each session."""
     jobs = []
     for session in range(sessions):
@@ -1156,6 +1227,8 @@ def benchmark_jobs(families=FAMILIES, sequence_lengths=SEQUENCE_LENGTHS, threads
         for family in families:
             module = __import__(f"src.{family}", fromlist=["PRESETS"])
             for preset in module.PRESETS:
+                if presets and preset not in presets:
+                    continue
                 for t in sequence_lengths:
                     for n in threads:
                         batch.append({
@@ -1172,10 +1245,13 @@ def benchmark_jobs(families=FAMILIES, sequence_lengths=SEQUENCE_LENGTHS, threads
     return jobs
 
 
-def benchmark_all(sessions=BENCHMARK["sessions"], backbone=True, force=False):
+def benchmark_all(sessions=BENCHMARK["sessions"], backbone=True, force=False, presets=None,
+                  sequence_lengths=SEQUENCE_LENGTHS):
     """Compute grid: one fresh Python process per job. Resumable: jobs whose result files already
-    exist are skipped (unless force). A failing job is logged and the grid carries on."""
-    jobs = benchmark_jobs(sessions=sessions, backbone=backbone)
+    exist are skipped (unless force). A failing job is logged and the grid carries on.
+    presets / sequence_lengths narrow the grid (for example to the models actually trained)."""
+    jobs = benchmark_jobs(sequence_lengths=sequence_lengths, sessions=sessions, backbone=backbone,
+                          presets=presets)
     done = lambda job: all((BENCH_DIR / f"{n}.json").exists() for n in job["outputs"])
     todo = [j for j in jobs if force or not done(j)]
     print(f"{len(jobs)} benchmark jobs; {len(jobs) - len(todo)} already done; {len(todo)} to run")
@@ -1211,6 +1287,9 @@ def summarise(results_dir=RESULTS_DIR):
     for row in read_csv(results_dir / "runs.csv"):
         groups.setdefault((row["preset"], int(row["T"]), row.get("variant") or "default"), []).append(row)
     cols = ["metrics.test.auroc", "metrics.test.auprc", "metrics.test.brier",
+            "metrics.test.sens_at_spec90", "metrics.test.spec_at_sens95",
+            "metrics.test.at_high_sens.sensitivity", "metrics.test.at_high_sens.specificity",
+            "metrics.test.at_high_sens.fn",
             "metrics.test.at_0.5.macro_f1", "metrics.test.at_0.5.balanced_accuracy",
             "metrics.test.at_0.5.sensitivity", "metrics.test.at_0.5.specificity",
             "metrics.test.at_youden.balanced_accuracy", "metrics.test.at_youden.sensitivity",
@@ -1243,6 +1322,292 @@ def summarise(results_dir=RESULTS_DIR):
     for r in acc:
         print(f"  {r['preset']:<20} T={r['T']:<3} {r['variant']:<10} runs={r['runs']:<3} AUROC "
               f"{r['metrics.test.auroc.mean']} +/- {r['metrics.test.auroc.sd']}")
+    write_report(results_dir)
+
+
+# Readable Markdown report --------------------------------------------------------------------
+
+REFERENCE_PRESET = "lstm_base"     # every model is compared with this one (paired, fold by fold)
+EQUIVALENCE_MARGIN = 0.03          # pre-registered TOST margin on AUROC
+FINDINGS_START, FINDINGS_END = "<!-- findings:start -->", "<!-- findings:end -->"
+_THRESHOLD_METRICS = [("Accuracy", "accuracy"), ("Balanced acc.", "balanced_accuracy"),
+                      ("Precision (PPV)", "ppv"), ("Recall (sensitivity)", "sensitivity"),
+                      ("Specificity", "specificity"), ("F1 (Abnormal)", "f1_abnormal"),
+                      ("Macro-F1", "macro_f1"), ("NPV", "npv"), ("MCC", "mcc")]
+_CUTS = [
+    ("at_0.5", "Cut-off 0.5 (default)",
+     "The model's own decision point: probability >= 0.5 means Abnormal (training used balanced class weights)."),
+    ("at_youden", "Youden cut-off (chosen on validation)",
+     "The cut-off that maximises sensitivity + specificity on the inner validation set, applied unchanged to test."),
+    ("at_high_sens", "High-sensitivity cut-off (chosen on validation for 95% sensitivity)",
+     "The highest cut-off that catches 95% of Abnormal clips on the inner validation set, applied unchanged to test."),
+]
+
+
+def report_path(results_dir=RESULTS_DIR, sequence_lengths=None):
+    """results/results_<folds>fold_T<T>.md, e.g. results_3fold_T20.md (T values joined by '-')."""
+    t = "-".join(str(x) for x in sorted(sequence_lengths)) if sequence_lengths else "all"
+    return Path(results_dir) / f"results_{N_FOLDS}fold_T{t}.md"
+
+
+def _preset_order():
+    """Presets in family order (baseline, lstm, transformer, hybrid), then file order."""
+    order = []
+    for family in FAMILIES:
+        order += list(__import__(f"src.{family}", fromlist=["PRESETS"]).PRESETS)
+    return order
+
+
+def _macs_of(family, preset, num_frames):
+    module = __import__(f"src.{family}", fromlist=["macs"])
+    return module.macs(preset, num_frames)
+
+
+def write_report(results_dir=RESULTS_DIR):
+    """Write the readable Markdown report from runs.csv, summary_compute.csv and the benchmark files.
+
+    Every table is regenerated from the result files, so the report never drifts from the data.
+    The hand-written findings live between FINDINGS_START and FINDINGS_END and are copied over
+    unchanged on every run; edit them in the report itself. Only completed default-variant runs
+    are used.
+    """
+    from scipy import stats
+
+    results_dir = Path(results_dir)
+    rows = [r for r in read_csv(results_dir / "runs.csv")
+            if r.get("status") == "completed" and (r.get("variant") or "default") == "default"]
+    if not rows:
+        print("no completed runs; report not written")
+        return None
+    order = _preset_order()
+    rows.sort(key=lambda r: (int(r["T"]), order.index(r["preset"]) if r["preset"] in order else 99,
+                             int(r["seed"]), int(r["fold"])))
+    t_values = sorted({int(r["T"]) for r in rows})
+    path = report_path(results_dir, t_values)
+    old = path.read_text(encoding="utf-8") if path.exists() else ""
+    if FINDINGS_START in old and FINDINGS_END in old:
+        findings = old[old.index(FINDINGS_START):old.index(FINDINGS_END) + len(FINDINGS_END)]
+    else:
+        findings = (f"{FINDINGS_START}\n## Findings\n\nWrite the findings here. This block is kept "
+                    f"unchanged when the report is regenerated.\n\n{FINDINGS_END}")
+
+    f = lambda r, k: float(r[k]) if r.get(k) not in (None, "") else float("nan")
+    ms = lambda v, d=3: (f"{np.nanmean(v):.{d}f} +/- {np.nanstd(v, ddof=1):.{d}f}" if len(v) > 1
+                         else f"{np.nanmean(v):.{d}f}")
+    seeds = sorted({int(r["seed"]) for r in rows})
+    folds = sorted({int(r["fold"]) for r in rows})
+    span = lambda k: (lambda v: f"{int(min(v))}" if min(v) == max(v) else f"{int(min(v))}–{int(max(v))}")(
+        [f(r, k) for r in rows])
+    comp = {(r["preset"], int(r["T"]), r["batch"], r["intra_threads"]): r
+            for r in read_csv(results_dir / "summary_compute.csv")}
+
+    out = []
+    w = out.append
+    w(f"# Results: {N_FOLDS}-fold cross-validation, {len(seeds)} seed(s), T = {', '.join(map(str, t_values))}")
+    w("")
+    w(f"{len(rows)} completed training runs on the {DATASET} dataset. Generated by `python -m src.common summary` "
+      f"from `results/runs.csv`, `results/summary_compute.csv` and `results/benchmark/`; each run's full "
+      f"record is in `results/<run>/run.json`. Last generated {now_utc()}.")
+    w("")
+    w("## Setup")
+    w("")
+    w("| Item | Value |")
+    w("|---|---|")
+    w(f"| Data | {DATASET} videos, frozen MobileNetV2 features, T = {', '.join(map(str, t_values))} frames per clip |")
+    w(f"| Folds | Stratified {N_FOLDS}-fold CV, seeds {', '.join(map(str, seeds))} "
+      f"(`data/splits/{DATASET}_seed*.json`) |")
+    w(f"| Fold sizes | train {span('data.n_train')} ({span('data.abnormal_train')} Abnormal), inner val "
+      f"{span('data.n_val')} ({span('data.abnormal_val')} Abnormal), test {span('data.n_test')} "
+      f"({span('data.abnormal_test')} Abnormal) |")
+    w("| Training | Shared head, balanced class weights, batch 32, at most 100 epochs, early stopping on "
+      "exact val AUROC (patience 15, best weights restored) |")
+    w(f"| Runs | {len(rows)} completed |")
+    w("")
+    w("Metric notes (all on the held-out test fold):")
+    w("")
+    w("- **AUROC**: primary metric. 0.5 is chance, 1.0 is perfect.")
+    w("- **Sens@Spec90**: share of Abnormal clips caught while only 10% of Normal clips are flagged "
+      "(read off the ROC curve).")
+    w("- **High-sensitivity cut-off**: chosen on the inner validation set to catch 95% of Abnormal clips, "
+      "then applied unchanged to test. **Missed** = Abnormal clips it still misses per test fold.")
+    w("- **MACs**: analytic multiply-accumulates per clip for the temporal model and head; the shared "
+      "MobileNetV2 backbone is not included.")
+    w("")
+    w(findings)
+    w("")
+
+    for t in t_values:
+        tr = [r for r in rows if int(r["T"]) == t]
+        presets = [p for p in order if any(r["preset"] == p for r in tr)]
+        family = {r["preset"]: r["family"] for r in tr}
+        by = {(r["preset"], int(r["seed"]), int(r["fold"])): r for r in tr}
+        col = lambda p, k: [f(r, k) for r in tr if r["preset"] == p]
+        sfx = f" (T = {t})"
+
+        w(f"## Summary per model{sfx}, mean +/- sd over folds and seeds")
+        w("")
+        w("| Model | Runs | AUROC | Sens@Spec90 | AUPRC | Sens at high-sens cut-off | Spec at high-sens cut-off | "
+          "Missed | Epochs | Fit s | Params | MACs |")
+        w("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for p in presets:
+            w(f"| `{p}` | {len(col(p, 'metrics.test.auroc'))} | {ms(col(p, 'metrics.test.auroc'))} | "
+              f"{ms(col(p, 'metrics.test.sens_at_spec90'))} | {ms(col(p, 'metrics.test.auprc'))} | "
+              f"{ms(col(p, 'metrics.test.at_high_sens.sensitivity'))} | "
+              f"{ms(col(p, 'metrics.test.at_high_sens.specificity'))} | "
+              f"{ms(col(p, 'metrics.test.at_high_sens.fn'), 1)} | {ms(col(p, 'training.epochs_run'), 1)} | "
+              f"{np.nanmean(col(p, 'training.fit_seconds')):.0f} | {int(col(p, 'model.params')[0]):,} | "
+              f"{_macs_of(family[p], p, t) / 1e6:.2f} M |")
+        w("")
+
+        bench = {p: comp.get((p, t, "1", "1")) for p in presets}
+        if any(bench.values()):
+            cm = lambda p, b, th: float(comp[(p, t, b, th)]["median_ms"]) if (p, t, b, th) in comp else float("nan")
+            w(f"## Compute: CPU latency, throughput and memory{sfx}")
+            w("")
+            w("One fresh process per measurement, compiled `tf.function`, random input (latency does not depend "
+              f"on the trained weights), {BENCHMARK['warmup_calls']} warm-up and {BENCHMARK['timed_calls']} timed "
+              "calls; median over sessions of each session's median. Temporal model and head only; the shared "
+              "front end is listed separately.")
+            w("")
+            w("| Model | Sessions | Batch 1, 1 thread (ms) | Batch 1, 8 threads (ms) | Batch 32, 1 thread (ms per batch) | "
+              "Batch 32, 8 threads (ms per batch) | Best throughput (clips/s) | Peak RAM (MB) | "
+              f"vs `{REFERENCE_PRESET}` at batch 1, 1 thread |")
+            w("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+            ref = cm(REFERENCE_PRESET, "1", "1")
+            for p in presets:
+                if not bench[p]:
+                    continue
+                cells = [comp[k] for k in comp if k[0] == p and k[1] == t]
+                best = max(float(c["clips_per_second"]) for c in cells)
+                ram = max(float(c["rss_peak_timing_mb"]) for c in cells)
+                speed = ("reference" if p == REFERENCE_PRESET else
+                         f"{ref / cm(p, '1', '1'):.1f}x faster" if ref >= cm(p, "1", "1") else
+                         f"{cm(p, '1', '1') / ref:.1f}x slower")
+                w(f"| `{p}` | {bench[p]['sessions']} | {cm(p, '1', '1'):.2f} | {cm(p, '1', '8'):.2f} | "
+                  f"{cm(p, '32', '1'):.2f} | {cm(p, '32', '8'):.2f} | {best:,.0f} | {ram:.0f} | {speed} |")
+            w("")
+            bb = [read_json(q) for q in BENCH_DIR.glob(f"mobilenetv2_backbone_T{t}_*.json")]
+            bb = [b for b in bb if b]
+            if bb and ("mobilenetv2_backbone", t, "1", "1") in comp:
+                decode = float(np.median([b["decode_ms_median"] for b in bb]))
+                prep = float(np.median([b["preprocess_ms_median"] for b in bb]))
+                bb1, bb8 = cm("mobilenetv2_backbone", "1", "1"), cm("mobilenetv2_backbone", "1", "8")
+                w(f"Shared front end per clip (identical for every model, T = {t}):")
+                w("")
+                w("| Step | 1 thread (ms) | 8 threads (ms) |")
+                w("|---|---:|---:|")
+                w(f"| Decode the video and sample {t} frames (OpenCV) | {decode:.0f} | {decode:.0f} |")
+                w(f"| Preprocess {t} frames | {prep:.0f} | {prep:.0f} |")
+                w(f"| MobileNetV2 on {t} frames | {bb1:.0f} | {bb8:.0f} |")
+                w(f"| **Front end total** | **{decode + prep + bb1:.0f}** | **{decode + prep + bb8:.0f}** |")
+                w("")
+                w("End-to-end latency per clip at batch 1 (front end + temporal model and head):")
+                w("")
+                w("| Model | 1 thread (ms) | Temporal part, 1 thread | 8 threads (ms) | Temporal part, 8 threads |")
+                w("|---|---:|---:|---:|---:|")
+                for p in presets:
+                    if not bench[p]:
+                        continue
+                    h1, h8 = cm(p, "1", "1"), cm(p, "1", "8")
+                    e1, e8 = decode + prep + bb1 + h1, decode + prep + bb8 + h8
+                    w(f"| `{p}` | {e1:.0f} | {100 * h1 / e1:.1f}% | {e8:.0f} | {100 * h8 / e8:.1f}% |")
+                w("")
+
+        if REFERENCE_PRESET in presets:
+            ratio = float(np.mean([f(r, "data.n_test") / (f(r, "data.n_train") + f(r, "data.n_val")) for r in tr]))
+            w(f"## Paired comparison with `{REFERENCE_PRESET}` (AUROC){sfx}")
+            w("")
+            w(f"Corrected resampled t-test (Nadeau and Bengio) over paired folds, n_test/n_train = {ratio:.2f}. "
+              f"Equivalence (TOST) holds when the 90% CI lies inside the pre-registered margin of "
+              f"+/- {EQUIVALENCE_MARGIN} AUROC.")
+            w("")
+            w("| Model | Pairs | Mean difference | 95% CI | p | 90% CI | Equivalent |")
+            w("|---|---:|---:|---:|---:|---:|---|")
+            for p in presets:
+                if p == REFERENCE_PRESET:
+                    continue
+                d = np.array([f(by[k], "metrics.test.auroc") - f(by[(REFERENCE_PRESET, k[1], k[2])], "metrics.test.auroc")
+                              for k in by if k[0] == p and (REFERENCE_PRESET, k[1], k[2]) in by])
+                if len(d) < 2:
+                    continue
+                n, se = len(d), d.std(ddof=1) * np.sqrt(1 / len(d) + ratio)
+                t95, t90 = stats.t.ppf(0.975, n - 1), stats.t.ppf(0.95, n - 1)
+                pv = 2 * stats.t.sf(abs(d.mean() / se), n - 1) if se > 0 else float("nan")
+                lo, hi = d.mean() - t90 * se, d.mean() + t90 * se
+                eq = "Yes" if lo > -EQUIVALENCE_MARGIN and hi < EQUIVALENCE_MARGIN else "No (CI too wide)"
+                w(f"| `{p}` | {n} | {d.mean():+.4f} | [{d.mean() - t95 * se:+.3f}, {d.mean() + t95 * se:+.3f}] | "
+                  f"{pv:.2f} | [{lo:+.3f}, {hi:+.3f}] | {eq} |")
+            w("")
+
+        w(f"## Threshold metrics: accuracy, precision, recall, F1 and more{sfx}")
+        w("")
+        w("These depend on the cut-off that turns a probability into a Normal / Abnormal decision, so they are "
+          "given at three cut-offs. Abnormal is the positive class: **precision** = of the clips flagged "
+          "Abnormal, how many are; **recall** = sensitivity = of the Abnormal clips, how many are flagged; "
+          "**specificity** = of the Normal clips, how many are cleared; **NPV** = of the clips cleared, how many "
+          "are truly Normal; **MCC** = Matthews correlation (-1 to 1, robust to imbalance). Plain accuracy is "
+          "reported but never used to decide. TP / FP / TN / FN are mean counts per test fold.")
+        w("")
+        w("Calibration (threshold-free):")
+        w("")
+        w("| Model | Brier score (lower is better) | Log loss (lower is better) | Mean prob. on Abnormal | "
+          "Mean prob. on Normal |")
+        w("|---|---:|---:|---:|---:|")
+        for p in presets:
+            w(f"| `{p}` | {ms(col(p, 'metrics.test.brier'))} | {ms(col(p, 'metrics.test.log_loss'))} | "
+              f"{ms(col(p, 'metrics.test.mean_prob_abnormal'))} | {ms(col(p, 'metrics.test.mean_prob_normal'))} |")
+        w("")
+        for key, title, note in _CUTS:
+            w(f"### {title}{sfx}")
+            w("")
+            w(note)
+            w("")
+            w("| Model | " + " | ".join(n for n, _ in _THRESHOLD_METRICS) + " | TP | FP | TN | FN |")
+            w("|---|" + "---:|" * (len(_THRESHOLD_METRICS) + 4))
+            for p in presets:
+                c = lambda k: col(p, f"metrics.test.{key}.{k}")
+                w(f"| `{p}` | " + " | ".join(ms(c(k)) for _, k in _THRESHOLD_METRICS) + " | "
+                  + " | ".join(f"{np.nanmean(c(k)):.1f}" for k in ("tp", "fp", "tn", "fn")) + " |")
+            w("")
+
+        w(f"## All runs{sfx}")
+        w("")
+        w("| Run | Model | Seed | Fold | AUROC | Sens@Spec90 | AUPRC | High-sens cut-off | Sens | Spec | Missed | "
+          "Youden sens | Youden spec | Epochs | Best epoch | Best val AUROC | Fit s |")
+        w("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for r in tr:
+            v = lambda k, d=3: f"{f(r, k):.{d}f}"
+            w(f"| `{r['run']}` | `{r['preset']}` | {r['seed']} | {r['fold']} | {v('metrics.test.auroc', 4)} | "
+              f"{v('metrics.test.sens_at_spec90')} | {v('metrics.test.auprc')} | "
+              f"{v('high_sensitivity_threshold_from_val')} | {v('metrics.test.at_high_sens.sensitivity')} | "
+              f"{v('metrics.test.at_high_sens.specificity')} | {int(f(r, 'metrics.test.at_high_sens.fn'))} | "
+              f"{v('metrics.test.at_youden.sensitivity')} | {v('metrics.test.at_youden.specificity')} | "
+              f"{int(f(r, 'training.epochs_run'))} | {int(f(r, 'training.best_epoch'))} | "
+              f"{v('training.best_val_auroc_exact')} | {f(r, 'training.fit_seconds'):.0f} |")
+        w("")
+        w(f"### Threshold metrics per run{sfx}")
+        w("")
+        w("Acc = accuracy, BA = balanced accuracy, Prec = precision, Rec = recall (sensitivity), "
+          "Spec = specificity, F1 = F1 for Abnormal.")
+        w("")
+        for key, title, _ in _CUTS:
+            w(f"#### {title}")
+            w("")
+            w("| Run | Cut-off | Acc | BA | Prec | Rec | Spec | F1 | Macro-F1 | NPV | MCC | TP | FP | TN | FN |")
+            w("|---|" + "---:|" * 14)
+            for r in tr:
+                v = lambda k: f(r, f"metrics.test.{key}.{k}")
+                w(f"| `{r['run']}` | {v('threshold'):.3f} | " + " | ".join(
+                    f"{v(k):.3f}" for k in ("accuracy", "balanced_accuracy", "ppv", "sensitivity", "specificity",
+                                            "f1_abnormal", "macro_f1", "npv", "mcc"))
+                  + " | " + " | ".join(str(int(v(k))) for k in ("tp", "fp", "tn", "fn")) + " |")
+            w("")
+
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("\n".join(out), encoding="utf-8")
+    _replace(tmp, path)
+    print(f"report -> {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")
+    return path
 
 
 # =============================================================================================
@@ -1339,6 +1704,8 @@ def main(argv=None):
     p.add_argument("--frames", type=int, default=CACHE_FRAMES)
     p.add_argument("--limit", type=int, default=None, help="first N videos only (smoke test)")
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--threads", type=int, default=None,
+                   help="cap TensorFlow intra-op threads (leave CPU free for other work)")
     p.add_argument("--overwrite", action="store_true")
     p = sub.add_parser("splits", help="write the shared fold files")
     p.add_argument("--seeds", type=int, nargs="*", default=list(SEEDS))
@@ -1350,10 +1717,12 @@ def main(argv=None):
     p.add_argument("--sessions", type=int, default=BENCHMARK["sessions"])
     p.add_argument("--no-backbone", action="store_true")
     p.add_argument("--force", action="store_true", help="re-run jobs that already have results")
-    sub.add_parser("summary", help="write results/summary_*.csv")
+    p.add_argument("--presets", nargs="*", default=None, help="only these presets (default: all)")
+    p.add_argument("--T", type=int, nargs="*", default=list(SEQUENCE_LENGTHS), choices=SEQUENCE_LENGTHS)
+    sub.add_parser("summary", help="write results/summary_*.csv and the Markdown report")
     args = parser.parse_args(argv)
 
-    if args.command == "backbone":
+    if args.command == "backbone" or (args.command == "extract" and args.threads):
         set_threads(args.threads)
     start_console_log(f"common_{args.command}")
     if args.command == "extract":
@@ -1363,7 +1732,8 @@ def main(argv=None):
     elif args.command == "backbone":
         benchmark_backbone(args.T, session=args.session)
     elif args.command == "benchmark-all":
-        benchmark_all(sessions=args.sessions, backbone=not args.no_backbone, force=args.force)
+        benchmark_all(sessions=args.sessions, backbone=not args.no_backbone, force=args.force,
+                      presets=args.presets, sequence_lengths=tuple(args.T))
     elif args.command == "summary":
         summarise()
 

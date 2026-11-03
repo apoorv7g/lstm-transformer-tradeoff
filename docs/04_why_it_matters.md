@@ -3,9 +3,9 @@
 ## 4.1 The clinical reason: AI has to run where the patients are
 
 Screening programmes for school children, primary-care clinics and community health camps record
-short videos with low-cost devices such as digital otoscopes and intra-oral cameras. The data in
-this project comes from exactly that kind of pipeline: pediatric oral-cavity screening, with
-children aged 3–18 (median 10).
+short videos with low-cost devices such as digital otoscopes and other handheld cameras. The data in
+this project comes from exactly that kind of pipeline: pediatric ear (otoscopy) screening, with
+children aged 3–18 (median 11).
 
 Places like these typically have:
 
@@ -73,7 +73,7 @@ that are common in student and early-stage medical-AI work:
 
 - ImageNet models fed with the wrong input scaling and channel order
 - confusion matrices computed on data that included the training set
-- accuracy reported on an 85/15 imbalanced set, where 84.5% is free
+- accuracy reported on a 74/26 imbalanced set, where 73.6% is free
 - non-stratified folds
 - no fixed seeds and no compute measurement at all
 

@@ -20,8 +20,8 @@ constraint.
 
 **Methods.**
 
-- *Data:* 535 pediatric oral-cavity screening videos (452 Normal, 83 Abnormal; 480×640; median
-  length 26.4 s).
+- *Data:* 874 pediatric ear (otoscopy) screening videos (643 Normal, 231 Abnormal; 480×640;
+  median length 13.1 s).
   From each video, T ∈ {10, 20, 40} frames are sampled uniformly and encoded once by a frozen
   ImageNet MobileNetV2, giving 1280-d per-frame embeddings.
 - *Models:* on these identical inputs we train
@@ -31,7 +31,7 @@ constraint.
   - optionally, an LSTM→Transformer hybrid
 
   All share the same classification head, optimiser budget and early-stopping rule.
-- *Accuracy:* evaluated with stratified 5-fold cross-validation (AUROC, macro-F1, balanced
+- *Accuracy:* evaluated with stratified 3-fold cross-validation repeated with 2 seeds (AUROC, macro-F1, balanced
   accuracy, sensitivity, specificity).
 - *Compute:* measured on an Intel i5-12450H CPU with fixed thread counts (parameters, FLOPs, median
   and p95 batch-1 latency, throughput, peak resident memory, training time, model size), both for
@@ -47,14 +47,14 @@ constraint.
 short-clip medical video tasks on CPU⟩.
 
 **Keywords:** medical video classification, LSTM, Transformer, self-attention, compute efficiency,
-CPU inference, oral-cavity screening, MobileNetV2, accuracy–efficiency trade-off.
+CPU inference, otoscopy, ear screening, MobileNetV2, accuracy–efficiency trade-off.
 
 ---
 
 ## Plain-language abstract
 
 Doctors and screening programmes increasingly use AI to read short medical videos, for example a
-camera looking inside a child's mouth. Such a system first looks at each frame on its own, then
+camera looking inside a child's ear. Such a system first looks at each frame on its own, then
 combines what it saw across the frames to reach a decision. There are two popular ways to do the
 "combining" step:
 

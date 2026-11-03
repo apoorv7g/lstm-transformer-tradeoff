@@ -1,0 +1,28 @@
+{
+  "run": "lstm_base_T20_s0_f2",
+  "family": "lstm",
+  "preset": "lstm_base",
+  "T": 20,
+  "seed": 0,
+  "fold": 2,
+  "variant": "default",
+  "attempt": 1,
+  "learning_rate": 0.001,
+  "max_epochs": 100,
+  "status": "completed",
+  "started_utc": "2026-11-03T17:21:10+00:00",
+  "updated_utc": "2026-11-03T17:21:45+00:00",
+  "pid": 988,
+  "epochs_done": 26,
+  "phase": "done",
+  "best_val_auroc_exact_so_far": 0.9698996655518395,
+  "last_epoch": {
+    "loss": 0.0030918046832084656,
+    "val_loss": 0.3305836021900177,
+    "val_auc": 0.9381271004676819,
+    "val_auroc_exact": 0.9645484949832777,
+    "lr": 0.0002500000118743628
+  },
+  "finished_utc": "2026-11-03T17:21:44+00:00",
+  "test_auroc": 0.8899745114698386
+}

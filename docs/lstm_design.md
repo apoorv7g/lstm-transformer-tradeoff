@@ -1,12 +1,13 @@
 # Design: LSTM Temporal Heads
 
-Code: `src/models/lstm.py`. Shared head: `src/models/heads.py`. Config: `configs/lstm.yaml`.
+Code: `src/lstm.py` (`PRESETS`, `RECIPE`, `build`, `macs`). Shared input, head and training loop:
+`src/common.py` (`feature_input`, `classifier_head`, `TRAINING`).
 
 ---
 
 ## 1. Lineage
 
-The LSTM side of this study **is** the DL_test1 model, with the bugs fixed. The legacy model was:
+The LSTM side of this study **is** the legacy model, with the bugs fixed. The legacy model was:
 
 ```python
 Sequential([
@@ -21,7 +22,7 @@ Sequential([
 Our `lstm_base` preset reproduces the temporal block and head **exactly**. The only difference is
 that the frozen backbone runs once offline, with correct preprocessing (see `data_pipeline.md`).
 
-DL_test1 also contained a "MiniLSTM" (`minLSTM/minLSTM.py`, `miniLSTM_miniGRU.py`). It is **not**
+The legacy project also contained a "MiniLSTM" (`minLSTM/minLSTM.py`, `miniLSTM_miniGRU.py`). It is **not**
 the minLSTM of Feng et al. (2024). It is a hand-written *standard* LSTM cell: it keeps the output
 gate, the tanh, and the h_{t−1} term inside every gate. Its parameter count equals a Keras LSTM's,
 and it is slower because it runs in a Python-level RNN loop. It is not carried over. A *true*
@@ -99,12 +100,12 @@ h_t = f'_t ⊙ h_{t-1} + i'_t ⊙ h̃_t
 | Setting | Value | Note |
 |---|---|---|
 | Loss | Binary cross-entropy | Abnormal = 1 |
-| Class weights | `balanced` (≈ 0.59 Normal / 3.22 Abnormal on oral) | Legacy had none |
+| Class weights | `balanced` (≈ 0.68 Normal / 1.89 Abnormal on the ear set) | Legacy had none |
 | Optimiser | Adam, lr 1e-3, `clipnorm=1.0` | Clipping is standard for RNNs |
 | Batch size | 32 | Cached features make this cheap |
 | Max epochs | 100 | |
-| Early stopping | monitor `val_auc` (inner val), patience 15, `restore_best_weights=True` | |
-| LR schedule | ReduceLROnPlateau(factor 0.5, patience 5) on `val_auc` | |
+| Early stopping | monitor exact inner-val AUROC (`val_auroc_exact`, sklearn, computed each epoch), patience 15, `restore_best_weights=True`. Not Keras `val_auc`, a 200-threshold approximation | |
+| LR schedule | ReduceLROnPlateau(factor 0.5, patience 5) on `val_auroc_exact` | |
 | Seed | `keras.utils.set_random_seed(seed)` per run | |
 | Threshold | 0.5 for reported metrics. Also report the Youden-optimal threshold chosen on inner val | |
 
@@ -113,7 +114,7 @@ validation set of seed 0 only, then fix the value for all runs.
 
 ## 6. Expected behaviour / what to watch
 
-- On about 364 training clips per fold, `lstm_base` (1.78 M params) can overfit within about 10–20 epochs.
+- On about 495 training clips per fold, `lstm_base` (1.78 M params) can overfit within about 10–20 epochs.
   Watch train vs inner-val AUC, and expect early stopping to fire early.
 - BiLSTM doubles the sequential work per layer (two directions). Expect the **worst batch-1 CPU
   latency** among the LSTMs, despite fewer parameters than `lstm_base`.

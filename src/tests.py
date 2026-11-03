@@ -17,9 +17,9 @@ import keras
 import numpy as np
 import pytest
 
-from src import common, hybrid, lstm, transformer
+from src import baseline, common, hybrid, lstm, transformer
 
-MODULES = {"lstm": lstm, "transformer": transformer, "hybrid": hybrid}
+MODULES = {"baseline": baseline, "lstm": lstm, "transformer": transformer, "hybrid": hybrid}
 PARAMS_T20 = {
     "lstm_small": 729_729,
     "lstm_base": 1_779_329,
@@ -28,6 +28,10 @@ PARAMS_T20 = {
     "transformer_base": 1_404_289,
     "transformer_deep": 2_458_497,
     "hybrid_base": 862_465,
+    "hybrid_attn": 444_930,
+    "hybrid_lite": 156_994,
+    "pool_mean": 82_049,
+    "pool_max": 82_049,
 }
 ALL = [(fam, p) for fam, mod in MODULES.items() for p in mod.PRESETS]
 
@@ -78,10 +82,10 @@ def test_sample_frames_missing_file(tmp_path):
 
 def test_split_integrity():
     rng = np.random.default_rng(0)
-    ids = np.array([f"video-{i}.mp4" for i in range(535)])
-    labels = (rng.random(535) < 83 / 535).astype(np.int8)
+    ids = np.array([f"video-{i}.mp4" for i in range(874)])
+    labels = (rng.random(874) < 231 / 874).astype(np.int8)
     split = common.make_split(ids, labels, seed=0)
-    assert len(split["folds"]) == 5
+    assert len(split["folds"]) == common.N_FOLDS == 3
     label_of = dict(zip(ids.tolist(), labels.tolist()))
     all_test = []
     for fold in split["folds"]:
@@ -120,7 +124,10 @@ def test_param_count_shape_and_macs(family, preset):
     assert model.count_params() == PARAMS_T20[preset]
     out = model.predict(np.zeros((3, 20, 1280), "float32"), verbose=0)
     assert out.shape == (3, 1) and np.all((out >= 0) & (out <= 1))
-    assert mod.macs(preset, 40) > mod.macs(preset, 20) > mod.macs(preset, 10) > 0
+    if family == "baseline":   # pooling has no multiplies, so cost does not grow with T
+        assert mod.macs(preset, 40) == mod.macs(preset, 10) == 1280 * 64 + 64
+    else:
+        assert mod.macs(preset, 40) > mod.macs(preset, 20) > mod.macs(preset, 10) > 0
 
 
 def test_macs_match_hand_count():
@@ -128,7 +135,8 @@ def test_macs_match_hand_count():
     assert lstm.macs("lstm_small", 10) == 10 * 4 * 128 * 1408 + 128 * 64 + 64
 
 
-@pytest.mark.parametrize("family,preset", [("transformer", "transformer_small"), ("hybrid", "hybrid_base")])
+@pytest.mark.parametrize("family,preset", [("transformer", "transformer_small"), ("hybrid", "hybrid_base"),
+                                           ("hybrid", "hybrid_attn"), ("baseline", "pool_max")])
 def test_custom_layers_round_trip(tmp_path, family, preset):
     model = MODULES[family].build(preset, 10)
     x = np.random.default_rng(0).normal(size=(2, 10, 1280)).astype("float32")
@@ -143,13 +151,22 @@ def test_recipes():
     assert common.full_recipe(transformer.RECIPE)["optimizer"] == "adamw"
     assert common.full_recipe(transformer.RECIPE)["warmup_epochs"] == 5
     assert hybrid.RECIPE is transformer.RECIPE
+    assert baseline.RECIPE == lstm.RECIPE
+
+
+def test_pool_baselines_ignore_frame_order():
+    x = np.random.default_rng(0).normal(size=(2, 10, 1280)).astype("float32")
+    for preset in baseline.PRESETS:
+        model = baseline.build(preset, 10)
+        np.testing.assert_allclose(model.predict(x, verbose=0), model.predict(x[:, ::-1], verbose=0),
+                                   atol=1e-5)
 
 
 # ---------------------------------------------------------------- metrics and logging
 
 def test_balanced_class_weight_matches_dataset():
-    w = common.balanced_class_weight([0] * 452 + [1] * 83)
-    assert w[0] == pytest.approx(0.59, abs=0.01) and w[1] == pytest.approx(3.22, abs=0.01)
+    w = common.balanced_class_weight([0] * 643 + [1] * 231)
+    assert w[0] == pytest.approx(0.68, abs=0.01) and w[1] == pytest.approx(1.89, abs=0.01)
 
 
 def test_metrics_perfect_and_youden():
@@ -159,6 +176,54 @@ def test_metrics_perfect_and_youden():
     assert m["auroc"] == 1.0 and m["auprc"] == 1.0
     assert m["at_0.5"]["sensitivity"] == 1.0 and m["at_0.5"]["specificity"] == 1.0 and m["at_0.5"]["mcc"] == 1.0
     assert 0.3 < m["at_youden"]["threshold"] <= 0.8
+
+
+def test_screening_operating_points():
+    # 10 Normal, 10 Abnormal; one Abnormal (0.05) scores below every Normal.
+    y = np.array([0] * 10 + [1] * 10)
+    p = np.array([0.10, 0.12, 0.14, 0.16, 0.18, 0.20, 0.22, 0.24, 0.60, 0.70]
+                 + [0.05, 0.65, 0.75, 0.80, 0.82, 0.84, 0.86, 0.88, 0.90, 0.95])
+    m = common.evaluate(y, p)
+    # 90% specificity allows 1 false alarm (0.70), so the cut-off can fall to 0.65: catches 9 of 10
+    assert m["sens_at_spec90"] == pytest.approx(0.9)
+    # 95% sensitivity needs all 10, so the cut-off drops to 0.05 and every Normal is flagged
+    assert m["spec_at_sens95"] == pytest.approx(0.0)
+    assert m["spec_at_sens90"] == pytest.approx(0.9)
+    thr = common.sensitivity_threshold(y, p, target=0.9)
+    assert thr == pytest.approx(0.65)
+    hs = common.evaluate(y, p, high_sens=thr)["at_high_sens"]
+    assert hs["sensitivity"] == pytest.approx(0.9) and hs["fn"] == 1
+
+
+def test_write_json_survives_brief_windows_lock(tmp_path, monkeypatch):
+    real, calls = os.replace, []
+
+    def flaky(src, dst):
+        calls.append(1)
+        if len(calls) < 3:
+            raise PermissionError("[WinError 5] Access is denied")
+        real(src, dst)
+
+    monkeypatch.setattr(common.os, "replace", flaky)
+    common.write_json(tmp_path / "s.json", {"a": 1})
+    assert common.read_json(tmp_path / "s.json") == {"a": 1} and len(calls) == 3
+
+
+def test_report_keeps_handwritten_findings(tmp_path):
+    """summary regenerates every table but must copy the findings block over unchanged."""
+    import shutil
+
+    if not (common.RESULTS_DIR / "runs.csv").exists():
+        pytest.skip("no results yet")
+    shutil.copy(common.RESULTS_DIR / "runs.csv", tmp_path / "runs.csv")
+    first = common.write_report(tmp_path)
+    text = first.read_text(encoding="utf-8")
+    assert common.FINDINGS_START in text and "## All runs" in text
+    mine = "\n".join([common.FINDINGS_START, "## Findings", "", "My notes.", common.FINDINGS_END])
+    start, end = text.index(common.FINDINGS_START), text.index(common.FINDINGS_END) + len(common.FINDINGS_END)
+    first.write_text(text[:start] + mine + text[end:], encoding="utf-8")
+    again = common.write_report(tmp_path).read_text(encoding="utf-8")
+    assert mine in again and again.count(common.FINDINGS_START) == 1
 
 
 def test_upsert_csv_replaces_same_key(tmp_path):
