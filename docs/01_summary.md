@@ -34,7 +34,8 @@ clips, class imbalance. That is the question this project answers with numbers.
    - LSTM family: `lstm_small`, `lstm_base` (the original legacy head), `bilstm_base`
    - Transformer family: `transformer_small`, `transformer_base` (parameter-matched to
      `lstm_base`), `transformer_deep`
-   - Stretch goal: an **LSTM→Transformer hybrid**
+   - Hybrids (LSTM, then attention): `hybrid_base`, `hybrid_attn`, `hybrid_lite`
+   - No-temporal controls: `pool_mean`, `pool_max`
 4. **Measure both axes on a CPU-only machine:**
    - *Accuracy:* AUROC, macro-F1, balanced accuracy, sensitivity, specificity. Stratified 3-fold
      CV with 2 seeds, identical folds for every model.
@@ -80,7 +81,11 @@ faster than the LSTMs. That is not yet a result, only a reason to measure carefu
 - Done: Design docs for the data pipeline, LSTM, Transformer and benchmarking protocol.
 - Done: Frame sampling, the ear feature cache, the shared splits, the training loop and the
   benchmark code (`src/common.py`).
-- Next: the first training runs on the ear set, then the full grid and the benchmark grid.
+- Done (4 Nov): 42 training runs (7 models x 3 folds x 2 seeds at T = 20), the CPU benchmark,
+  statistics, figures (`graphs/`) and the A4 report (`docs/report/`).
+- Result: the LSTM and the Transformer are equally accurate (AUROC 0.907 vs 0.905) and the
+  Transformer is 2.6 times faster per clip; the temporal model is under 1% of end-to-end time.
+  See `docs/05_results.md`.
 
 ## Expected deliverables
 
@@ -88,4 +93,5 @@ faster than the LSTMs. That is not yet a result, only a reason to measure carefu
    final tables.
 2. A results table and an **accuracy-vs-latency Pareto plot** per T.
 3. A hypothesis-test write-up: is the Transformer better, equivalent or worse, and at what cost.
-4. A final presentation. Stretch goals: the hybrid model and a short paper.
+4. A final presentation, built from the report and figures. The hybrid models are done; a short
+   paper remains optional.

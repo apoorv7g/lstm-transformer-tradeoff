@@ -11,9 +11,9 @@ decision before work starts on it.
 |----|----------|
 | **RQ1 (accuracy)** | With identical frozen MobileNetV2 frame features, does a Transformer-encoder temporal head classify Normal vs Abnormal ear (otoscopy) clips more accurately than an LSTM head? |
 | **RQ2 (compute)** | What do the two families cost on a CPU-only machine: parameters, FLOPs, batch-1 latency, throughput, peak RAM, training time, file size? Is the cost of the temporal head even significant next to the CNN backbone? |
-| **RQ3 (scaling)** | How do accuracy and cost change as clip length T grows (10 → 20 → 40 frames)? Does the O(T²) attention term matter at these lengths? |
+| **RQ3 (scaling)** | How do accuracy and cost change as clip length T grows (10 → 20 → 40 frames)? Does the O(T²) attention term matter at these lengths? *Not run: the user fixed the study at T = 20 on 4 Nov.* |
 | **RQ4 (trade-off)** | Which models are **Pareto-optimal** in (AUROC, latency)? What do we recommend for CPU deployment? |
-| RQ5 (stretch) | Does an LSTM→Transformer hybrid move the Pareto front? |
+| RQ5 (hybrid) | Does an LSTM→Transformer hybrid move the Pareto front? *Answered: `hybrid_attn` and `hybrid_lite` sit on the front, see `docs/05_results.md`.* |
 
 ## 3.2 Hypotheses (fixed before the experiments)
 
@@ -57,7 +57,10 @@ inference latency is **≤** the LSTM head's.
 **Models.** All share the classifier head and the input features.
 - LSTM: `lstm_small`, `lstm_base`, `bilstm_base`
 - Transformer: `transformer_small`, `transformer_base`, `transformer_deep`
-- Hybrid (stretch): `hybrid_base`
+- Hybrid: `hybrid_base`, `hybrid_attn`, `hybrid_lite`
+- No-temporal controls: `pool_mean`, `pool_max`
+- Trained in the main experiment: `lstm_base`, `transformer_base`, the three hybrids and the two
+  controls. The other presets are defined but were not trained.
 - Optional cheap recurrent baseline: true minLSTM (Feng et al., 2024)
 
 **Metrics**
@@ -100,9 +103,9 @@ Windows 11. Python 3.11, TensorFlow 2.17, Keras 3.6. No GPU anywhere in the meas
    - latency vs T curves
    - training-time bars
    - ROC curves
-4. **Hypothesis-test report** for H₀-acc, H₀-cpu and H₀-T.
-5. **Final presentation** (week of Nov 2). **Stretch:** hybrid model and a short paper draft
-   (week of Nov 9).
+4. **Hypothesis-test report** for H₀-acc and H₀-cpu (done: `docs/05_results.md`; H₀-T not run).
+5. **Final presentation** (week of Nov 2), plus the A4 report `docs/report/`. The hybrid models are
+   done; a short paper draft remains optional.
 
 ## 3.6 Timeline (re-planned on 23 Oct)
 

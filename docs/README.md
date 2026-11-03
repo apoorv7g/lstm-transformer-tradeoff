@@ -7,9 +7,10 @@ All written documentation, in one flat folder. Read in this order:
 | File | What it covers |
 |---|---|
 | `01_summary.md` | One-page overview of the project |
-| `02_abstract.md` | Draft abstract (numbers in angle brackets are filled in after the experiments) |
+| `02_abstract.md` | Structured abstract, completed with the results |
 | `03_scope.md` | Research questions, hypotheses, what is in and out of scope, risks |
 | `04_why_it_matters.md` | Why the comparison is useful |
+| `05_results.md` | **Results and conclusions**: what was run, the numbers, hypothesis verdicts |
 
 **How it is built**
 
@@ -27,6 +28,9 @@ All written documentation, in one flat folder. Read in this order:
 | `literature_review.md` | Related papers, each marked verified or unverified |
 | `legacy_pipeline_audit.md` | Bugs found in the earlier LSTM project and how this repo fixes them |
 
-**Slides**
+**Slides and report**
 
-`slides/` holds the progress review deck (PDF) and the files used to build it.
+- `slides/` holds the 23 Oct progress review deck (PDF) and the files used to build it.
+- `report/` holds the A4 project report
+  (`Compute_vs_Accuracy_LSTM_Transformer_Report.pdf`), its source `report.html` (same theme as the
+  deck) and `build.py` (headless Playwright; run with `py -3.11 docs/report/build.py`).

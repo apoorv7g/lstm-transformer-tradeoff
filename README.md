@@ -4,12 +4,9 @@ A controlled study of the trade-off between classification accuracy and CPU comp
 LSTM temporal model is replaced by a Transformer encoder, applied to short clinical screening
 videos labelled **Normal** or **Abnormal**.
 
-**Status (3 Nov 2026):**
-- Done: design phase, model definitions, dataset and environment, frame sampling, the cached
-  MobileNetV2 feature tensor (874 x 40 x 1280), the shared cross-validation splits, and the
-  training and benchmark code with detailed logging.
-- Next: the first training runs on the ear dataset (nothing has been trained on it yet).
-- See [Project status](#project-status).
+**Status (4 Nov 2026): main experiment complete.** 42 training runs (7 models x 3 folds x 2 seeds
+at T = 20) and the CPU benchmark are done; results, figures and a written report are in the repo.
+See [Results and conclusions](#results-and-conclusions).
 
 ---
 
@@ -38,8 +35,7 @@ This project measures both sides of the trade-off under controlled conditions:
 
 The study is built around a null hypothesis taken from prior work. On short clips represented by
 frozen CNN features, a Transformer temporal head is **not** more accurate than an LSTM head. The
-compute side is measured rather than assumed. Our analysis suggests that, at these sequence
-lengths, the usual "Transformers are slower" intuition may not hold on CPU.
+compute side is measured rather than assumed.
 
 Full motivation and scope:
 [summary](docs/01_summary.md), [abstract](docs/02_abstract.md), [scope](docs/03_scope.md) and
@@ -51,8 +47,47 @@ Full motivation and scope:
 |---|---|
 | RQ1 | With identical frozen frame features, is a Transformer temporal head more accurate than an LSTM head? |
 | RQ2 | What does each family cost on CPU (parameters, FLOPs, latency, memory, training time)? Is the temporal head even a significant share of end-to-end cost? |
-| RQ3 | How do accuracy and cost scale with clip length T ∈ {10, 20, 40}? |
+| RQ3 | How do accuracy and cost scale with clip length T ∈ {10, 20, 40}? (not run: the study was fixed at T = 20) |
 | RQ4 | Which models are Pareto-optimal in accuracy vs. latency, and which should be deployed on CPU? |
+
+## Results and conclusions
+
+Main experiment: 7 models, T = 20 frames, stratified 3-fold cross-validation x 2 seeds (6 paired
+test folds per model, 77 Abnormal clips each), CPU timings on an Intel i5-12450H.
+
+| Model | AUROC | Sens. at 90% spec. | Latency (batch 1, 1 thread) | MACs per clip | Equivalent to `lstm_base` (+/- 0.03) |
+|---|---:|---:|---:|---:|---|
+| `hybrid_attn` | **0.909** | **0.760** | 1.11 ms | 8.6 M | Yes |
+| `lstm_base` | 0.907 | 0.749 | 3.54 ms | 35.4 M | reference |
+| `transformer_base` | 0.905 | 0.699 | 1.36 ms | 28.0 M | Yes |
+| `hybrid_base` | 0.905 | 0.701 | 2.12 ms | 17.2 M | not shown (wide CI) |
+| `hybrid_lite` | 0.900 | 0.684 | 0.92 ms | 3.0 M | not shown (wide CI) |
+| `pool_mean` | 0.900 | 0.665 | 0.22 ms | 0.08 M | Yes |
+| `pool_max` | 0.893 | 0.639 | 0.25 ms | 0.08 M | not shown (wide CI) |
+
+![Accuracy vs CPU latency](graphs/01_pareto_auroc_vs_latency.png)
+
+**Conclusions**
+
+1. **The LSTM and the Transformer are equally accurate** (AUROC 0.907 vs 0.905; difference -0.001,
+   90% CI inside the pre-registered +/- 0.03 margin). H0-acc is supported.
+2. **The Transformer is cheaper:** 2.6 times faster per clip on one CPU thread (1.36 vs 3.54 ms),
+   with 21% fewer parameters and MACs. H0-cpu is supported. At batch 32 on 8 threads they tie.
+3. **There is no compute-versus-accuracy trade-off here.** Accuracy is flat while compute varies
+   16-fold in latency and about 430-fold in arithmetic. Even `pool_mean`, which ignores frame
+   order, is equivalent in AUROC.
+4. **The temporal model is under 1% of end-to-end time.** Decoding (about 145 ms) and MobileNetV2
+   on 20 frames (about 312 ms) dominate; fewer frames or a lighter backbone would save far more.
+5. **Recommendation:** `hybrid_attn` as the best all-round model (best accuracy and screening
+   sensitivity, 3.2 times faster than the LSTM); `pool_mean` as the cheapest acceptable one.
+6. **For screening,** a cut-off chosen on validation for 95% sensitivity catches 87–92% of
+   Abnormal test clips (6 to 10 of 77 missed per fold) with NPV about 0.95, at the cost of about
+   one false alarm per true Abnormal. Fewer misses most likely need better frame features.
+
+Details: [results and conclusions](docs/05_results.md),
+[full tables and per-run numbers](results/results_3fold_T20.md),
+[figures](graphs/README.md), and the
+[written report (PDF)](docs/report/Compute_vs_Accuracy_LSTM_Transformer_Report.pdf).
 
 ## Dataset
 
@@ -89,7 +124,8 @@ temporal block (the only component that varies between models)
   │  LSTM:         LSTM(256) → LSTM(128)
   │  Transformer:  Dense(1280 → d) + learned positional embedding
   │                → N × [pre-LN multi-head attention + feed-forward] → LayerNorm → mean pooling
-  │  Hybrid:       LSTM(128) → one Transformer block → mean pooling
+  │  Hybrid:       LSTM(128) → one Transformer block → mean / attention + max pooling
+  │  Baseline:     no temporal block; mean or max over frames
   ▼
 classifier head (identical for all models): Dense(64, ReLU) → Dropout(0.5) → Dense(1, sigmoid)
 ```
@@ -105,14 +141,15 @@ The following are held fixed across all models:
   early stopping, repeated with two seeds (0 and 1). Folds are saved to disk and shared by all
   models.
 - **Head and training.** Identical classifier head, binary cross-entropy with balanced class
-  weights, batch size, epoch budget, and early stopping on validation AUROC.
+  weights, batch size, epoch budget, and early stopping on the exact validation AUROC.
 - **Preprocessing.** `mobilenet_v2.preprocess_input` scaling and RGB channel order, matching the
   ImageNet weights.
 
 ### Models
 
 Every model below is implemented and builds correctly. Parameter counts are verified with
-TensorFlow 2.17 / Keras 3.6.
+TensorFlow 2.17 / Keras 3.6. The main experiment trained the seven models from `lstm_base` down;
+`lstm_small`, `bilstm_base`, `transformer_small` and `transformer_deep` are defined but not trained.
 
 | Preset | Temporal block | Parameters (T = 20) | MACs per clip (T = 20) |
 |---|---|---:|---:|
@@ -147,7 +184,7 @@ Design rationale, equations and training recipes:
 | Accuracy metrics | AUROC (primary); sensitivity at 90% specificity (main screening number); test sensitivity and specificity at a cut-off chosen on validation for 95% sensitivity; macro-F1, balanced accuracy, AUPRC, Brier; computed only on held-out folds |
 | Latency | Compiled `tf.function`, 50 warm-up and ≥ 300 timed calls, median and p95; batch 1 and 32; 1 and 8 threads; one process per model |
 | Other compute metrics | Parameters, analytic MACs and FLOPs, peak resident memory, training time per epoch, model file size; head-only and end-to-end |
-| Statistics | Corrected resampled t-test, 95% confidence intervals and effect sizes, TOST equivalence (margin 0.03 AUROC), McNemar and DeLong tests, Holm correction |
+| Statistics | Corrected resampled t-test (Nadeau and Bengio), 95% and 90% confidence intervals, TOST equivalence (margin 0.03 AUROC). McNemar, DeLong and Holm correction were planned but not run |
 | Hardware | Intel Core i5-12450H (8 cores, 12 threads), 16 GB RAM, Windows 11, no GPU |
 
 Full protocol: [benchmarking protocol](docs/benchmarking_protocol.md).
@@ -158,7 +195,7 @@ Full protocol: [benchmarking protocol](docs/benchmarking_protocol.md).
 
 - Python 3.11
 - CPU-only TensorFlow 2.17 / Keras 3.6 (pinned in `requirements.txt`)
-- Edge or Chrome, only if you want to rebuild the slides
+- Edge or Chrome, only to rebuild the slides; Playwright (`pip install playwright`) to rebuild the PDF report
 
 ### Installation
 
@@ -216,16 +253,16 @@ Setup (done):
 | Extract features | `python -m src.common extract` | Done (ear cache, `data/features/ear_T40.npz`) |
 | Create splits | `python -m src.common splits` | Done (`data/splits/ear_seed{0,1}.json`, 3 folds each) |
 
-Experiment flow (code ready, nothing run yet):
+Experiment flow:
 
 | Step | What and why | Command | Status |
 |---|---|---|---|
 | 1. Sanity run | One fold of each main model. Check `history.csv` and `run.json`: validation AUROC rises above 0.5 and levels off, early stopping fires at a sensible epoch, loss falls without NaN | `python -m src.lstm --preset lstm_base --T 20 --seed 0 --folds 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0 --folds 0` | Done (both healthy) |
-| 2. LR check (optional) | Try the other learning rate once on seed 0, then fix one for all runs. Results go to separate `_lr...` folders | `python -m src.lstm --preset lstm_base --T 20 --seed 0 --lr 3e-4` and `python -m src.transformer --preset transformer_base --T 20 --seed 0 --lr 1e-3` | Pending |
-| 3. Main pair, all folds | First answer to the main question (Transformer vs LSTM accuracy) | `python -m src.lstm --preset lstm_base --T 20 --seed 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0` | Pending |
-| 4. Full grid | Every model x T in {10, 20, 40} x seeds {0, 1} x 3 folds; overnight is fine. Completed runs are skipped, so re-running resumes | see the loop below | Pending |
-| 5. Benchmark grid | CPU latency, memory and FLOPs; run plugged in with nothing else open. Resumes if interrupted | `python -m src.common benchmark-all` | Pending |
-| 6. Statistics and report | `python -m src.common summary` writes `results/summary_*.csv` and the Markdown report `results/results_<folds>fold_T<T>.md` (all tables, corrected t-test and TOST against `lstm_base`, latency, per-run rows; hand-written findings are kept). `python -m src.common graphs` writes the Pareto and compute figures to `graphs/`. DeLong and McNemar are not written yet | `python -m src.common summary` then `python -m src.common graphs` | Partial |
+| 2. LR check (optional) | Try the other learning rate once on seed 0, then fix one for all runs. Results go to separate `_lr...` folders | `python -m src.lstm --preset lstm_base --T 20 --seed 0 --lr 3e-4` and `python -m src.transformer --preset transformer_base --T 20 --seed 0 --lr 1e-3` | Skipped (standard recipe per family kept) |
+| 3. Main pair, all folds | First answer to the main question (Transformer vs LSTM accuracy) | `python -m src.lstm --preset lstm_base --T 20 --seed 0` and `python -m src.transformer --preset transformer_base --T 20 --seed 0` | Done (in the 42-run batch) |
+| 4. Full grid | Every model x T in {10, 20, 40} x seeds {0, 1} x 3 folds; overnight is fine. Completed runs are skipped, so re-running resumes | see the loop below | Done at T = 20 for 7 models; T = 10 / 40 not run (scope) |
+| 5. Benchmark grid | CPU latency, memory and FLOPs; run plugged in with nothing else open. Resumes if interrupted | `python -m src.common benchmark-all` | Done for the 7 trained models at T = 20 (`--T 20 --presets ...`) |
+| 6. Statistics and report | `python -m src.common summary` writes `results/summary_*.csv` and the Markdown report `results/results_<folds>fold_T<T>.md` (all tables, corrected t-test and TOST against `lstm_base`, latency, per-run rows; hand-written findings are kept). `python -m src.common graphs` writes the Pareto and compute figures to `graphs/`. DeLong and McNemar are not written yet | `python -m src.common summary` then `python -m src.common graphs` | Done (DeLong / McNemar not run) |
 
 Full grid (step 4), PowerShell:
 
@@ -263,7 +300,8 @@ lstm-transformer-tradeoff/
 ├── data/                    raw/ (videos, local only), features/ (cache, local only), splits/ (fold IDs)
 ├── results/                 One folder per training run, benchmark files, summary CSVs and the Markdown report
 ├── graphs/                  Compute-vs-accuracy figures (PNG for slides, SVG for print), built by `python -m src.common graphs`
-├── docs/                    All written documentation; slides/ holds the progress review deck
+├── docs/                    All written documentation; slides/ holds the progress review deck,
+│                            report/ the A4 PDF report (report.html, build.py)
 ├── CacheMemory.pdf          Original proposal deck
 └── requirements.txt
 ```
@@ -274,10 +312,10 @@ lstm-transformer-tradeoff/
 |---|---|---|
 | Architecture finalisation | Week of Oct 5 | Complete |
 | Data preprocessing | Week of Oct 12 | Complete: ear features cached, splits written |
-| Training | Week of Oct 19 | In progress: code ready, no runs yet |
-| Benchmarking | Week of Oct 26 | Code ready, no runs yet |
-| Final analysis | Week of Nov 2 | Not started |
-| Paper and hybrid model (buffer) | Week of Nov 9 | Optional |
+| Training | Week of Oct 19 | Complete: 42 runs (3-fold x 2 seeds, T = 20) |
+| Benchmarking | Week of Oct 26 | Complete: 48 CPU timing jobs |
+| Final analysis | Week of Nov 2 | Complete: statistics, figures, report PDF |
+| Hybrid model | Week of Nov 9 | Complete: `hybrid_attn` and `hybrid_lite` designed and evaluated |
 
 Progress review slides:
 [docs/slides/Progress_Review_2026-10-23_CacheMemory.pdf](docs/slides/Progress_Review_2026-10-23_CacheMemory.pdf).
@@ -290,7 +328,9 @@ Progress review slides:
 - The CNN backbone is frozen. End-to-end fine-tuning and video-native Transformers (ViViT,
   TimeSformer) are out of scope.
 - The metadata has no patient identifier, so leakage between related clips cannot be fully ruled
-  out. A grouped-split sensitivity analysis is planned.
+  out. It affects every model equally, but absolute scores may be optimistic.
+- Only T = 20 frames and 6 paired folds were run, so some confidence intervals are wide and the
+  effect of the number of frames is untested.
 - This is an engineering comparison, not a validated diagnostic tool.
 
 ## Documentation
@@ -301,6 +341,10 @@ Progress review slides:
 | [Abstract](docs/02_abstract.md) | Structured abstract |
 | [Scope](docs/03_scope.md) | Research questions, hypotheses, deliverables, risks |
 | [Why it matters](docs/04_why_it_matters.md) | Clinical, computational and research motivation |
+| [Results and conclusions](docs/05_results.md) | What was run, the numbers, hypothesis verdicts and conclusions |
+| [Report (PDF)](docs/report/Compute_vs_Accuracy_LSTM_Transformer_Report.pdf) | Plain-language A4 report with all figures |
+| [Full results](results/results_3fold_T20.md) | Every table and every run, rebuilt by `python -m src.common summary` |
+| [Figures](graphs/README.md) | The six compute-vs-accuracy figures and how to read them |
 | [Data pipeline](docs/data_pipeline.md) | Frame sampling, feature extraction, splits |
 | [LSTM design](docs/lstm_design.md) | Architecture, parameter and compute analysis, training recipe |
 | [Transformer design](docs/transformer_design.md) | Architecture, hybrid model, compute analysis |

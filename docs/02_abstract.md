@@ -1,7 +1,7 @@
 # 2. Abstract
 
-> Draft abstract, written before the experiments. Values in ⟨angle brackets⟩ are placeholders to
-> fill in once the results exist. Do not report them as findings until then.
+> Written before the experiments and completed with the results of the main experiment
+> (4 Nov 2026). Full numbers: `docs/05_results.md` and `results/results_3fold_T20.md`.
 
 ---
 
@@ -22,13 +22,13 @@ constraint.
 
 - *Data:* 874 pediatric ear (otoscopy) screening videos (643 Normal, 231 Abnormal; 480×640;
   median length 13.1 s).
-  From each video, T ∈ {10, 20, 40} frames are sampled uniformly and encoded once by a frozen
-  ImageNet MobileNetV2, giving 1280-d per-frame embeddings.
-- *Models:* on these identical inputs we train
-  - three LSTM variants (0.73–1.78 M parameters)
-  - three pre-LayerNorm Transformer-encoder variants (0.44–2.46 M parameters, one
-    parameter-matched to the LSTM baseline)
-  - optionally, an LSTM→Transformer hybrid
+  From each video, T = 20 frames are sampled uniformly and encoded once by a frozen ImageNet
+  MobileNetV2, giving 1280-d per-frame embeddings.
+- *Models:* on these identical inputs we train seven temporal models:
+  - an LSTM (`lstm_base`, 1.78 M parameters)
+  - a pre-LayerNorm Transformer encoder parameter-matched to it (`transformer_base`, 1.40 M)
+  - three LSTM→attention hybrids, two of them with attention plus max pooling (0.16–0.86 M)
+  - two no-temporal controls that average or max-pool the frames (0.08 M)
 
   All share the same classification head, optimiser budget and early-stopping rule.
 - *Accuracy:* evaluated with stratified 3-fold cross-validation repeated with 2 seeds (AUROC, macro-F1, balanced
@@ -39,12 +39,21 @@ constraint.
 - *Statistics:* differences are tested with the corrected resampled t-test, with effect sizes and a
   pre-registered equivalence margin of Δ = 0.03 AUROC.
 
-**Results.** ⟨Transformer vs LSTM AUROC: x ± y vs x ± y; Δ = …, p = …⟩.
-⟨Head-only batch-1 latency: … ms vs … ms; end-to-end latency dominated by MobileNetV2 (…%)⟩.
-⟨Effect of T⟩. ⟨Pareto-optimal models⟩.
+**Results.** Over 6 paired test folds, the Transformer and the LSTM reached AUROC 0.905 ± 0.011
+and 0.907 ± 0.013 (Δ = -0.001, p = 0.87; 90% CI -0.019 to +0.016, inside the equivalence margin).
+All seven models scored AUROC 0.893–0.909 and none differed significantly from the LSTM; even the
+frame-averaging control was equivalent (0.900). Batch-1 latency of the temporal head on one CPU
+thread was 1.36 ms for the Transformer and 3.54 ms for the LSTM (2.6 times faster); at batch 32 on
+8 threads the two tied. End to end, video decoding and MobileNetV2 took over 99% of the time per
+clip (about 462 of 465 ms). The Pareto-optimal models were `pool_mean`, `hybrid_lite` and
+`hybrid_attn`. The effect of T was not tested.
 
-**Conclusions.** ⟨Whether H₀ is rejected. A practical recommendation for model choice in small,
-short-clip medical video tasks on CPU⟩.
+**Conclusions.** H₀-acc is supported (the families are equivalent in accuracy) and H₀-cpu holds
+(the Transformer is faster, not slower). There is no compute-versus-accuracy trade-off between the
+two families on this task: the cheaper Transformer loses nothing. Because the temporal head is
+under 1% of end-to-end cost, deployments should save compute through fewer frames or a lighter
+backbone; an attention-pooling hybrid (`hybrid_attn`) gave the best accuracy and screening
+sensitivity at a third of the LSTM's latency.
 
 **Keywords:** medical video classification, LSTM, Transformer, self-attention, compute efficiency,
 CPU inference, otoscopy, ear screening, MobileNetV2, accuracy–efficiency trade-off.
@@ -73,6 +82,5 @@ memory-hungry. The result tells a clinic with modest hardware which model is wor
 
 ## One-sentence version
 
-*On short, small-sample medical videos and a CPU-only budget, does a Transformer temporal model
-beat an LSTM by enough to justify its cost? We measure both sides of that question under controlled
-conditions.*
+*On short, small-sample medical videos and a CPU-only budget, a Transformer temporal model is as
+accurate as an LSTM and 2.6 times faster, but both are under 1% of the end-to-end cost.*

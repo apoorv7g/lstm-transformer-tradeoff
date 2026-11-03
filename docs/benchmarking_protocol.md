@@ -98,7 +98,11 @@ therefore always report two numbers:
 2. **End-to-end**: video decode + MobileNetV2 on T frames + head. This is the deployment answer
    (RQ4). Decoding and preprocessing time are reported separately, not hidden.
 
-## 5. Statistics (to be implemented once results exist)
+## 5. Statistics
+
+Implemented in `src/common.py` (`paired_vs_reference`, used by `summary` and `graphs`): items 1, 2,
+the 95% and 90% confidence intervals of item 3, and item 4. Items 5, 6 and 8 and the bootstrap of
+item 7 were not run in the main experiment. Results: `docs/05_results.md`.
 
 All tests are paired by fold, since every model sees the identical split files.
 
@@ -125,8 +129,13 @@ All tests are paired by fold, since every model sees the identical split files.
   (`python -m src.common summary`)
 - `results/summary_compute.csv`: model × T × threads × batch, median over sessions
   (`python -m src.common summary`)
-- Planned, not written yet: `results/stats.md` (every hypothesis test with statistic, p-value, CI
-  and decision) and figures:
+- `results/results_3fold_T20.md`: the full report (rebuilt by `summary`): per-model summary,
+  paired tests and TOST against `lstm_base`, threshold metrics at three cut-offs, compute and
+  end-to-end tables, one row per run, and hand-written findings that survive regeneration.
+- `graphs/` (`python -m src.common graphs`): AUROC and sensitivity at 90% specificity against
+  latency (Pareto front), AUROC against MACs, latency per model, end-to-end breakdown, equivalence
+  forest plot. Of the figures originally planned below, the T panels, training-time bars, ROC
+  curves and attention maps were not made:
   1. AUROC vs batch-1 latency (head-only), one panel per T, with Pareto front highlighted
   2. Latency vs T per model (k = 1 and k = 8)
   3. Same as (1) but end-to-end

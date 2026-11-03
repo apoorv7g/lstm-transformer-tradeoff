@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Compute versus Accuracy: LSTM and Transformer Models</title>
+<!--
+  A4 project report. Theme taken from the progress review deck (docs/slides/slides.html), which
+  mirrors CacheMemory.pdf: navy #233039, gold #D7AC54, JetBrains Mono body in grey, Cantarell Bold
+  headings, chamfered navy title tabs, peach (LSTM) and blue (Transformer) accent boxes, light
+  grey table headers. Build: bash docs/report/build.sh
+-->
+<style>
+  @font-face { font-family: "JetBrains Mono"; src: url("../slides/JetBrainsMono.ttf"); font-weight: 100 800; }
+  @font-face { font-family: "Cantarell"; src: url("../slides/Cantarell-Bold.ttf"); font-weight: 700; }
+
+  @page {
+    size: A4;
+    margin: 20mm 17mm 18mm 17mm;
+    @top-center { content: "Compute versus Accuracy: LSTM and Transformer Models"; font-family: "Cantarell", sans-serif;
+                  font-size: 9.5pt; color: #233039; }
+    @bottom-center { content: counter(page); font-family: "Cantarell", sans-serif; font-size: 10pt; color: #233039; }
+  }
+  @page :first { @top-center { content: none; } }
+
+  :root {
+    --navy: #233039; --gold: #D7AC54; --ink: #454545; --muted: #6b6b6b;
+    --peach: #F9CB9C; --blue: #C9DAF8; --green: #D9EAD3; --grey: #858585; --rule: #DDDDDD; --head: #F2F2F2;
+    --lstm: #E69138; --tf: #3C78D8; --hyb: #6AA84F; --base: #6B6B6B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #fff; }
+  body { font-family: "JetBrains Mono", monospace; font-size: 9.6pt; line-height: 1.6; color: var(--ink);
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  b, strong { font-weight: 700; color: #262626; }
+  p { margin: 0 0 7pt 0; text-align: justify; hyphens: auto; }
+  ul.dash li, ol.num li, .box, .navybox, .figread, figcaption, dl.gl dd { text-align: justify; hyphens: auto; }
+  .muted { color: var(--muted); }
+
+  /* section title: the deck's chamfered navy tab */
+  h1 { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 15pt; color: var(--gold);
+       background: var(--navy); display: block; width: fit-content; padding: 7pt 26pt 7pt 18pt; margin: 18pt 0 11pt 0;
+       clip-path: polygon(0 0, calc(100% - 12pt) 0, 100% 12pt, 100% 100%, 12pt 100%, 0 calc(100% - 12pt));
+       break-after: avoid; }
+  h1 .n { color: #fff; opacity: 0.55; margin-right: 8pt; }
+  h2 { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 12pt; color: var(--navy);
+       border-left: 3pt solid var(--gold); padding-left: 7pt; margin: 13pt 0 6pt 0; break-after: avoid; }
+  h3 { font-weight: 700; font-size: 10pt; color: var(--navy); margin: 9pt 0 4pt 0; break-after: avoid; }
+  .newpage { break-before: auto; }
+
+  ul.dash { list-style: none; margin: 0 0 7pt 0; }
+  ul.dash li { padding-left: 1.5em; text-indent: -1.5em; margin-bottom: 2pt; }
+  ul.dash li::before { content: "-  "; white-space: pre; color: var(--gold); font-weight: 700; }
+  ol.num { margin: 0 0 7pt 1.6em; }
+  ol.num li { margin-bottom: 2pt; padding-left: 2pt; }
+
+  .box { border: 0.75pt solid var(--ink); border-radius: 10pt; padding: 8pt 11pt; color: #1f1f1f; margin: 6pt 0 9pt 0;
+         break-inside: avoid; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .peach { background: var(--peach); } .blue { background: var(--blue); } .green { background: var(--green); }
+  .soft { background: #FBF7EE; border-color: #E4D3AA; }
+  .navybox { background: var(--navy); color: #f2f2f2; border-radius: 9pt; padding: 9pt 12pt; margin: 6pt 0 9pt 0;
+             break-inside: avoid; }
+  .navybox b, .navybox strong { color: var(--gold); }
+  .boxtitle { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 11pt; margin-bottom: 4pt; color: var(--navy); }
+  .navybox .boxtitle { color: var(--gold); }
+  .row { display: flex; gap: 10pt; }
+  .col { flex: 1; min-width: 0; }
+  .row > .box, .row > .navybox { margin: 0; }
+  .rowwrap { margin: 6pt 0 9pt 0; break-inside: avoid; }
+
+  table.t { width: 100%; border-collapse: collapse; font-size: 8.6pt; line-height: 1.35; margin: 5pt 0 4pt 0;
+            break-inside: avoid; }
+  table.t th, table.t td { border: 0.75pt solid var(--rule); padding: 3pt 5pt; text-align: left; vertical-align: middle; color: #262626; }
+  table.t th { background: var(--head); font-weight: 700; }
+  table.t td.n, table.t th.n { text-align: right; white-space: nowrap; }
+  table.t tr.ref td { background: #FDF6E8; }
+  .tcap { font-size: 8.4pt; color: var(--muted); margin: 0 0 9pt 0;  text-align: center; }
+  .dot { display: inline-block; width: 7pt; height: 7pt; border-radius: 2pt; margin-right: 5pt; vertical-align: 0; }
+
+  figure { margin: 8pt 0 10pt 0; break-inside: avoid; text-align: center; }
+  figure img { width: 94%; display: block; margin: 0 auto; border: 0.75pt solid var(--rule); border-radius: 6pt; }
+  figcaption { font-size: 8.6pt; color: var(--muted); margin-top: 4pt; line-height: 1.5; text-align: center !important; }
+  .diagram { text-align: center; margin: 8pt 0 3pt 0; break-inside: avoid; }
+  .diagram svg { width: 86%; height: auto; display: block; margin: 0 auto; }
+  figcaption b { color: var(--navy); }
+  .figread { background: #F7F7F7; border-left: 3pt solid var(--gold); padding: 6pt 9pt; margin: 4pt 0 10pt 0;
+             font-size: 9.2pt; break-inside: avoid; }
+
+  /* flow diagrams (from the deck) */
+  .flow { display: flex; align-items: stretch; justify-content: center; margin: 7pt 0 9pt 0; break-inside: avoid; }
+  .node { flex: 1; border: 0.75pt solid var(--ink); border-radius: 8pt; padding: 5pt 6pt; font-size: 8.3pt; line-height: 1.4;
+          color: #1f1f1f; background: #fff; min-width: 0; }
+  .node .h { font-weight: 700; font-size: 9pt; margin-bottom: 2pt; color: var(--navy); }
+  .arrow { width: 13pt; display: flex; align-items: center; justify-content: center; color: var(--grey); font-weight: 700; font-size: 12pt; }
+
+  /* sequence diagrams for LSTM vs Transformer */
+  .seq { display: flex; align-items: center; gap: 0; margin: 4pt 0 3pt 0; }
+  .fr { width: 30pt; height: 22pt; border-radius: 4pt; background: #ECECEC; border: 0.75pt solid #BDBDBD;
+        display: flex; align-items: center; justify-content: center; font-size: 8pt; color: #333; }
+  .cell { width: 34pt; height: 22pt; border-radius: 5pt; display: flex; align-items: center; justify-content: center;
+          font-size: 8pt; font-weight: 700; color: #fff; }
+  .sm { font-size: 10pt; color: var(--grey); width: 11pt; text-align: center; }
+
+  /* cover */
+  .cover { position: relative; border-radius: 14pt; overflow: hidden; padding: 22pt 22pt 20pt 22pt; margin-bottom: 14pt;
+           background: url("../slides/bg.jpg") center / cover no-repeat; border: 0.75pt solid #E9E2D0; }
+  .cover .logo { position: absolute; right: 10pt; top: 6pt; width: 128pt; }
+  .cover .kicker { font-size: 9pt; color: var(--muted); letter-spacing: 0.5pt; margin-top: 46pt; }
+  .cover .titletab { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 20pt; line-height: 1.3; color: var(--gold);
+                     background: var(--navy); padding: 13pt 30pt 13pt 18pt; margin-top: 8pt;
+                     clip-path: polygon(0 0, calc(100% - 18pt) 0, 100% 18pt, 100% 100%, 18pt 100%, 0 calc(100% - 18pt)); }
+  .cover .sub { font-size: 10.5pt; color: #3a3a3a; margin-top: 10pt; }
+  .cover .author { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 14pt; color: var(--navy); margin-top: 14pt; }
+  .cover .meta { font-size: 9pt; color: var(--muted); margin-top: 10pt; }
+
+  .tiles { display: flex; gap: 8pt; margin: 8pt 0 10pt 0; break-inside: avoid; }
+  .tile { flex: 1; border: 0.75pt solid var(--rule); border-radius: 9pt; padding: 7pt 9pt; background: #fff; }
+  .tile .v { font-family: "Cantarell", sans-serif; font-weight: 700; font-size: 14pt; color: var(--navy); line-height: 1.2; }
+  .tile .l { font-size: 8.2pt; color: var(--muted); line-height: 1.4; margin-top: 2pt; }
+  .tile.gold { border-color: var(--gold); background: #FDF8EE; }
+
+  .toc { columns: 2; column-gap: 18pt; font-size: 9.2pt; }
+  .toc div { break-inside: avoid; padding: 1pt 0; }
+  .toc .k { color: var(--gold); font-weight: 700; display: inline-block; width: 20pt; }
+
+  .verdict { display: inline-block; font-weight: 700; font-size: 8.2pt; padding: 1pt 6pt; border-radius: 7pt; }
+  .v-yes { background: var(--navy); color: #fff; } .v-no { background: #E6E6E6; color: #444; } .v-open { background: var(--gold); color: #fff; }
+  .mono { font-size: 8.6pt; background: #F5F5F5; border: 0.75pt solid var(--rule); border-radius: 5pt; padding: 6pt 8pt;
+          white-space: pre; line-height: 1.5; color: #262626; margin: 4pt 0 8pt 0; break-inside: avoid; }
+  dl.gl { display: grid; grid-template-columns: 120pt 1fr; column-gap: 10pt; row-gap: 4pt; font-size: 9pt; }
+  dl.gl dt { font-weight: 700; color: var(--navy); }
+</style>
+</head>
+<body>
+
+<!-- ============================== COVER ============================== -->
+<div class="cover">
+  <img class="logo" src="../slides/logo.png" alt="">
+  <div class="kicker">RESEARCH PROJECT</div>
+  <div class="titletab">Compute versus Accuracy Trade-off in LSTM and Transformer Models for Medical Video Classification</div>
+  <div class="meta">RV University  .  November 2026</div>
+</div>
+
+<h2 style="margin-top:4pt">The study in one page</h2>
+<p>Short videos of children's ear canals are labelled <b>Normal</b> or <b>Abnormal</b>. A model that flags
+Abnormal videos could help screening, but it has to run on ordinary computers without a graphics card.
+The two most common ways to read a video frame by frame are the <b>LSTM</b> and the <b>Transformer</b>.
+Transformers are often assumed to be more accurate but more expensive. This study tests that assumption
+fairly: every model sees exactly the same frame features, data splits and training budget, and only the
+part that reads the sequence of frames changes.</p>
+
+<div class="tiles">
+  <div class="tile"><div class="v">0.907 vs 0.905</div><div class="l">AUROC of the LSTM vs the Transformer: statistically equivalent</div></div>
+  <div class="tile gold"><div class="v">2.6x faster</div><div class="l">Transformer vs LSTM per clip on one CPU thread (1.36 vs 3.54 ms)</div></div>
+  <div class="tile"><div class="v">under 1%</div><div class="l">share of the total time per clip spent in the temporal model</div></div>
+  <div class="tile"><div class="v">42 runs</div><div class="l">7 models x 3 folds x 2 seeds, plus 48 timing jobs</div></div>
+</div>
+
+<div class="row rowwrap">
+  <div class="col box peach">
+    <div class="boxtitle">What we found</div>
+    <ul class="dash">
+      <li>All 7 models reach the same accuracy (AUROC 0.89 to 0.91).</li>
+      <li>The Transformer is as accurate as the LSTM and 2.6 times faster.</li>
+      <li>Even a model that ignores frame order matches them.</li>
+      <li>There is no real trade-off: the cheaper model loses nothing.</li>
+    </ul>
+  </div>
+  <div class="col box blue">
+    <div class="boxtitle">What it means</div>
+    <ul class="dash">
+      <li>Best all-round model: <b>hybrid_attn</b> (top accuracy, 3.2x faster than the LSTM).</li>
+      <li>Cheapest acceptable model: <b>pool_mean</b> (16x faster).</li>
+      <li>The real cost is video decoding and the image network, not the LSTM or Transformer.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Contents</h2>
+<div class="toc">
+  <div><span class="k">1</span>Two ways to read a video</div>
+  <div><span class="k">2</span>Why this study</div>
+  <div><span class="k">3</span>Questions and hypotheses</div>
+  <div><span class="k">4</span>The data</div>
+  <div><span class="k">5</span>From video to numbers</div>
+  <div><span class="k">6</span>The seven models</div>
+  <div><span class="k">7</span>Training and testing</div>
+  <div><span class="k">8</span>How we measure</div>
+  <div><span class="k">9</span>Results: accuracy</div>
+  <div><span class="k">10</span>Results: screening view</div>
+  <div><span class="k">11</span>Results: compute</div>
+  <div><span class="k">12</span>What it means</div>
+  <div><span class="k">13</span>Limitations</div>
+  <div><span class="k">14</span>Conclusion</div>
+  <div><span class="k">A</span>Glossary</div>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<section class="newpage">
+<h1><span class="n">1</span>Two ways to read a video</h1>
+<p>A video is a sequence of images (frames). To decide whether a clip is Normal or Abnormal, a model first
+turns each frame into a list of numbers that describes it, then combines the frames into one decision. The
+part that combines frames is called the <b>temporal model</b>. This study compares two families of
+temporal model.</p>
+
+<h2>The LSTM: one frame at a time, with a memory</h2>
+<p>An LSTM (Long Short-Term Memory network) reads the frames <b>in order, one after another</b>. It keeps a
+running memory. At each frame, small learned "gates" decide what to add to the memory, what to forget and what
+to pass on. After the last frame, the memory summarises the whole clip.</p>
+<div class="diagram"><svg viewBox="0 0 505 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="LSTM reads frames one after another"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#858585"/></marker></defs><rect x="20" y="24" width="70" height="32" rx="7" fill="#E69138" stroke="none" stroke-width="0.9"/><text x="55.0" y="44.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">LSTM</text><rect x="20" y="94" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="55.0" y="111.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 1</text><line x1="55" y1="93" x2="55" y2="60" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><rect x="115" y="24" width="70" height="32" rx="7" fill="#E69138" stroke="none" stroke-width="0.9"/><text x="150.0" y="44.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">LSTM</text><rect x="115" y="94" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="150.0" y="111.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 2</text><line x1="150" y1="93" x2="150" y2="60" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><rect x="210" y="24" width="70" height="32" rx="7" fill="#E69138" stroke="none" stroke-width="0.9"/><text x="245.0" y="44.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">LSTM</text><rect x="210" y="94" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="245.0" y="111.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 3</text><line x1="245" y1="93" x2="245" y2="60" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><rect x="330" y="24" width="70" height="32" rx="7" fill="#E69138" stroke="none" stroke-width="0.9"/><text x="365.0" y="44.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">LSTM</text><rect x="330" y="94" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="365.0" y="111.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 20</text><line x1="365" y1="93" x2="365" y2="60" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><line x1="92" y1="40" x2="111" y2="40" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><line x1="187" y1="40" x2="206" y2="40" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><line x1="282" y1="40" x2="326" y2="40" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)" stroke-dasharray="3 3"/><text x="304" y="111" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="12" fill="#858585">...</text><text x="101" y="16" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#6b6b6b">memory</text><text x="196" y="16" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#6b6b6b">memory</text><line x1="402" y1="40" x2="421" y2="40" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><rect x="425" y="24" width="75" height="32" rx="7" fill="#233039" stroke="none" stroke-width="0.9"/><text x="462.5" y="44.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">summary</text></svg></div>
+<p class="tcap">The memory is passed along the chain, so step 2 cannot start before step 1 has finished.</p>
+<ul class="dash">
+  <li><b>Strengths:</b> order is built in; small and well understood; works on small datasets.</li>
+  <li><b>Weakness:</b> the steps must run one after another, so the work cannot be spread across processor cores.
+      Its cost grows in proportion to the number of frames.</li>
+</ul>
+
+<h2>The Transformer: all frames at once, with attention</h2>
+<p>A Transformer looks at <b>all frames at the same time</b>. Each frame is compared with every other frame
+("attention"), and the comparison decides how much each frame should borrow from the others. Because it sees
+everything at once, it is also told each frame's position. The results are averaged into one summary.</p>
+<div class="diagram"><svg viewBox="0 0 505 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Transformer compares all frames at once"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#858585"/></marker></defs><rect x="20" y="26" width="330" height="78" rx="10" fill="#E3ECFB" stroke="#3C78D8" stroke-width="0.9"/><text x="185" y="16" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="#233039">attention: every frame compared with every frame</text><path d="M65,72 Q105.0,58.4 145,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><path d="M65,72 Q145.0,44.8 225,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><path d="M65,72 Q185.0,31.199999999999996 305,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><path d="M145,72 Q185.0,58.4 225,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><path d="M145,72 Q225.0,44.8 305,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><path d="M225,72 Q265.0,58.4 305,72" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.4"/><circle cx="65" cy="82" r="11" fill="#3C78D8" stroke="#fff" stroke-width="1.5"/><rect x="30" y="128" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="65.0" y="145.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 1</text><line x1="65" y1="127" x2="65" y2="96" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><circle cx="145" cy="82" r="11" fill="#3C78D8" stroke="#fff" stroke-width="1.5"/><rect x="110" y="128" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="145.0" y="145.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 2</text><line x1="145" y1="127" x2="145" y2="96" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><circle cx="225" cy="82" r="11" fill="#3C78D8" stroke="#fff" stroke-width="1.5"/><rect x="190" y="128" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="225.0" y="145.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 3</text><line x1="225" y1="127" x2="225" y2="96" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><circle cx="305" cy="82" r="11" fill="#3C78D8" stroke="#fff" stroke-width="1.5"/><rect x="270" y="128" width="70" height="26" rx="7" fill="#ECECEC" stroke="#BDBDBD" stroke-width="0.9"/><text x="305.0" y="145.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="400" fill="#333">frame 20</text><line x1="305" y1="127" x2="305" y2="96" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><line x1="352" y1="65" x2="421" y2="65" stroke="#858585" stroke-width="1.4" marker-end="url(#ah)"/><rect x="425" y="49" width="75" height="32" rx="7" fill="#233039" stroke="none" stroke-width="0.9"/><text x="462.5" y="69.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#fff">summary</text><text x="386" y="58" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#6b6b6b">average</text></svg></div>
+<p class="tcap">All comparisons can be computed together, which suits modern processors.</p>
+<ul class="dash">
+  <li><b>Strengths:</b> frames are processed in parallel; any frame can link directly to any other.</li>
+  <li><b>Weaknesses:</b> the number of comparisons grows with the square of the number of frames; it usually
+      needs more data to train well.</li>
+</ul>
+
+<table class="t">
+  <tr><th></th><th><span class="dot" style="background:var(--lstm)"></span>LSTM</th><th><span class="dot" style="background:var(--tf)"></span>Transformer</th></tr>
+  <tr><td><b>How it reads</b></td><td>One frame after another</td><td>All frames together</td></tr>
+  <tr><td><b>Knows the order</b></td><td>Automatically</td><td>Needs a position signal</td></tr>
+  <tr><td><b>Runs in parallel</b></td><td>No</td><td>Yes</td></tr>
+  <tr><td><b>Cost as frames grow</b></td><td>Proportional to frames</td><td>Faster than proportional (comparisons)</td></tr>
+  <tr><td><b>Common belief</b></td><td>Cheaper, a bit less accurate</td><td>More accurate, more expensive</td></tr>
+</table>
+<p class="tcap">The last row is the assumption this study puts to the test.</p>
+
+<h2>Hybrids and "no temporal model"</h2>
+<p>A <b>hybrid</b> uses both: an LSTM first reads the frames in order, then an attention block lets every
+step compare itself with every other. We also test the opposite extreme: a model with <b>no temporal model at
+all</b>, which simply averages the frames. If it scores as well as the others, the order of the frames is not
+adding anything for this task.</p>
+</section>
+
+<!-- ============================== 2-3 ============================== -->
+<section class="newpage">
+<h1><span class="n">2</span>Why this study</h1>
+<ul class="dash">
+  <li><b>Screening happens on ordinary computers.</b> Clinics and school programmes rarely have graphics cards.
+      What a model costs on a normal laptop processor (CPU) matters as much as its accuracy.</li>
+  <li><b>Comparisons in the literature are rarely fair.</b> They are usually run on graphics cards and large
+      datasets, and the LSTM and Transformer often get different inputs, data or training effort.</li>
+  <li><b>Medical video datasets are small.</b> With a few hundred clips, the extra power of a Transformer may not
+      help, while its cost remains.</li>
+  <li><b>The earlier project used an LSTM only.</b> Its code also had errors (wrong colour order, wrong image scaling,
+      short videos silently dropped, test results computed on training data). This study rebuilds the pipeline
+      correctly before comparing anything.</li>
+</ul>
+
+<div class="navybox">
+  <div class="boxtitle">The fair-test rule</div>
+  Everything is held constant except the temporal model: <b>same frame features</b>, <b>same data splits</b>,
+  <b>same classifier at the end</b>, <b>same training rules</b>, <b>same machine</b>. Any difference in the results
+  can then only come from the temporal model.
+</div>
+
+<h1><span class="n">3</span>Questions and hypotheses</h1>
+<p>The hypotheses were written down <b>before</b> any result existed, including the margin for calling two
+models "equally accurate". This prevents choosing the test after seeing the numbers.</p>
+<table class="t">
+  <tr><th style="width:24%">Question</th><th>Hypothesis tested</th><th style="width:22%">Status</th></tr>
+  <tr><td><b>Q1. Accuracy</b><br>Is the Transformer more accurate than the LSTM?</td>
+      <td><b>H0-acc:</b> both are equally accurate. "Equal" means the difference in AUROC (see section 8) is
+          reliably within +/- 0.03.</td><td><span class="verdict v-yes">Answered</span></td></tr>
+  <tr><td><b>Q2. Compute</b><br>What does each cost on a CPU?</td>
+      <td><b>H0-cpu:</b> the Transformer is no slower than the LSTM for one clip.</td>
+      <td><span class="verdict v-yes">Answered</span></td></tr>
+</table>
+<p>The comparison that decides Q1 is the main pair, <b>lstm_base</b> against <b>transformer_base</b>, which were sized
+to have a similar number of learned parameters (1.78 million and 1.40 million). The other five models add context.</p>
+
+<!-- ============================== 4 ============================== -->
+<h1><span class="n">4</span>The data</h1>
+<p>The dataset is a private collection of short pediatric ear examination videos, recorded with a handheld
+camera. Each video carries one label, Normal or Abnormal, and the child's age.</p>
+<div class="row rowwrap">
+  <div class="col">
+    <table class="t" style="margin-top:0">
+      <tr><th>Property</th><th class="n">Value</th></tr>
+      <tr><td>Videos</td><td class="n">874</td></tr>
+      <tr><td>Normal</td><td class="n">643 (73.6%)</td></tr>
+      <tr><td>Abnormal</td><td class="n">231 (26.4%)</td></tr>
+      <tr><td>Age of the child</td><td class="n">3 to 18 years (median 11)</td></tr>
+      <tr><td>Resolution</td><td class="n">480 x 640, portrait</td></tr>
+      <tr><td>Length</td><td class="n">0.9 to 71 s (median 13 s)</td></tr>
+      <tr><td>Frame rate</td><td class="n">12.6 to 29.8 fps (median 29)</td></tr>
+      <tr><td>Total size</td><td class="n">2.6 GB</td></tr>
+    </table>
+  </div>
+  <div class="col">
+    <div class="box soft" style="margin-top:0">
+      <div class="boxtitle">Three things to keep in mind</div>
+      <ul class="dash">
+        <li><b>Imbalance.</b> About 3 in 4 videos are Normal. A "model" that always answers Normal is already
+            73.6% accurate, so plain accuracy is misleading. We judge models mainly by AUROC.</li>
+        <li><b>No patient ID.</b> Two videos of the same child could end up in training and testing. This affects
+            every model equally, so the comparison stays fair.</li>
+        <li><b>Privacy.</b> Videos and features never leave the machine. Only summary numbers and video IDs are shared.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="box blue">
+  <div class="boxtitle">Why the ear set (a finding in itself)</div>
+  The study first tried a second, oral-cavity video set (535 videos). The pipeline worked, but the frame features
+  carried almost no signal: a simple straight-line model reached only AUROC 0.57 to 0.60, and the child's age
+  alone did better (0.66). On the ear set, the same simple model reaches <b>0.91 to 0.93</b>, and age alone is at
+  chance (0.50), so the models cannot cheat by guessing from age. The study therefore uses the ear set.
+</div>
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section class="newpage">
+<h1><span class="n">5</span>From video to numbers</h1>
+<p>Every model receives exactly the same input, built once by the pipeline below.</p>
+<div class="diagram"><svg viewBox="0 0 548 104" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Pipeline from video to probability"><defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#858585"/></marker></defs><rect x="2" y="10" width="82" height="72" rx="8" fill="#fff" stroke="#BDBDBD" stroke-width="1"/><text x="43.0" y="35.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Video</text><text x="43.0" y="50.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">mp4, 480 x 640</text><text x="43.0" y="62.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">about 13 s</text><rect x="94" y="10" width="82" height="72" rx="8" fill="#ECECEC" stroke="#BDBDBD" stroke-width="1"/><text x="135.0" y="35.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">20 frames</text><text x="135.0" y="50.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">evenly spaced</text><text x="135.0" y="62.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">start to end</text><rect x="186" y="10" width="82" height="72" rx="8" fill="#fff" stroke="#BDBDBD" stroke-width="1"/><text x="227.0" y="35.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Prepare</text><text x="227.0" y="50.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">right colours</text><text x="227.0" y="62.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">224 x 224</text><rect x="278" y="10" width="82" height="72" rx="8" fill="#E6E6E6" stroke="#9E9E9E" stroke-width="1"/><text x="319.0" y="29.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">MobileNetV2</text><text x="319.0" y="44.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">frozen,</text><text x="319.0" y="56.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">1,280 numbers</text><text x="319.0" y="68.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">per frame</text><rect x="370" y="10" width="82" height="72" rx="8" fill="#FDF6E8" stroke="#D7AC54" stroke-width="1"/><text x="411.0" y="35.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Temporal</text><text x="411.0" y="50.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">the only part</text><text x="411.0" y="62.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">that changes</text><rect x="462" y="10" width="82" height="72" rx="8" fill="#233039" stroke="#233039" stroke-width="1"/><text x="503.0" y="35.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#D7AC54">Classifier</text><text x="503.0" y="50.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">probability</text><text x="503.0" y="62.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">of Abnormal</text><line x1="85" y1="46.0" x2="92.5" y2="46.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="177" y1="46.0" x2="184.5" y2="46.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="269" y1="46.0" x2="276.5" y2="46.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="361" y1="46.0" x2="368.5" y2="46.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="453" y1="46.0" x2="460.5" y2="46.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><text x="319.0" y="97" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#6b6b6b">saved once</text><text x="411.0" y="97" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#9a7425">this varies</text></svg></div>
+
+<h2>What is T, the number of frames?</h2>
+<p>Videos are long (median 374 frames) and a model cannot take every frame, so we take <b>T evenly spaced
+frames</b>. This study uses <b>T = 20</b>: for a typical 13-second video, one frame about every 0.65 seconds.
+Very short videos have their frames repeated to reach 20; no video is ever dropped (only 4 videos are shorter
+than 40 frames).</p>
+
+<h2>What is MobileNetV2, and why is it frozen?</h2>
+<p>MobileNetV2 is a small, fast image network that was trained on a large collection of everyday photos
+(ImageNet). We use it as a fixed <b>"frame describer"</b>: it turns each frame into 1,280 numbers and is not
+trained further ("frozen"). This keeps the comparison about the temporal model alone.</p>
+
+<h2>Computed once, reused by every model</h2>
+<p>Because the image network is frozen and the frames are never altered, its output for a frame is always the
+same. So the 1,280 numbers for all 874 videos were computed <b>once</b> (5.5 minutes on the laptop) and saved.
+Every training run then reads these numbers instead of decoding videos, which gives identical results at about
+1/100 of the cost. Frames 1 to 40 were stored; T = 20 uses every second one.</p>
+
+<div class="box soft">
+  <div class="boxtitle">Errors fixed from the earlier code</div>
+  <ul class="dash">
+    <li>Colours were fed in the wrong order (blue and red swapped); now correct.</li>
+    <li>Images were scaled the wrong way for this network; now the network's own preparation is used.</li>
+    <li>Short videos were silently dropped; now they are padded and logged.</li>
+    <li>Results were computed on videos the model had trained on; now every test video is unseen.</li>
+  </ul>
+</div>
+
+<!-- ============================== 6 ============================== -->
+<h1><span class="n">6</span>The seven models</h1>
+<p>All seven share the same input (20 frames x 1,280 numbers) and the same small <b>classifier</b> at the end:
+one layer of 64 units, dropout of 50% (randomly switching off half the units during training, against
+overfitting), and one output: the probability that the clip is Abnormal. Only the temporal model in the
+middle differs.</p>
+
+<div class="diagram"><svg viewBox="0 0 538 254" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The temporal model is the only part that varies"><defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#858585"/></marker></defs><rect x="140" y="6" width="258" height="242" rx="12" fill="#FDFBF5" stroke="#D7AC54" stroke-width="1" stroke-dasharray="5 4"/><text x="269" y="23" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.4" font-weight="700" fill="#9a7425">temporal model: the only part that varies</text><rect x="6" y="101.0" width="112" height="68" rx="8" fill="#fff" stroke="#BDBDBD" stroke-width="1"/><text x="62.0" y="125.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#233039">Input</text><text x="62.0" y="140.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">20 frames</text><text x="62.0" y="152.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">x 1,280 numbers</text><rect x="154" y="34" width="230" height="46" rx="8" fill="#F9CB9C" stroke="#E69138" stroke-width="1"/><text x="269.0" y="46.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">LSTM</text><text x="269.0" y="61.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">lstm_base: reads the</text><text x="269.0" y="73.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">frames in order</text><line x1="120" y1="135.0" x2="151" y2="57.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="386" y1="57.0" x2="418" y2="135.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="154" y="86" width="230" height="46" rx="8" fill="#C9DAF8" stroke="#3C78D8" stroke-width="1"/><text x="269.0" y="98.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Transformer</text><text x="269.0" y="113.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">transformer_base: all</text><text x="269.0" y="125.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">frames at once</text><line x1="120" y1="135.0" x2="151" y2="109.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="386" y1="109.0" x2="418" y2="135.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="154" y="138" width="230" height="46" rx="8" fill="#D9EAD3" stroke="#6AA84F" stroke-width="1"/><text x="269.0" y="150.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Hybrids</text><text x="269.0" y="165.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">three versions: LSTM,</text><text x="269.0" y="177.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">then attention</text><line x1="120" y1="135.0" x2="151" y2="161.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="386" y1="161.0" x2="418" y2="135.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="154" y="190" width="230" height="46" rx="8" fill="#E6E6E6" stroke="#6B6B6B" stroke-width="1"/><text x="269.0" y="202.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">No temporal model</text><text x="269.0" y="217.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">pool_mean / pool_max:</text><text x="269.0" y="229.9" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">average or maximum</text><line x1="120" y1="135.0" x2="151" y2="213.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="386" y1="213.0" x2="418" y2="135.0" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="422" y="93.0" width="112" height="84" rx="8" fill="#233039" stroke="#233039" stroke-width="1"/><text x="478.0" y="113.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#D7AC54">Classifier</text><text x="478.0" y="128.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">same for all</text><text x="478.0" y="140.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">64 units,</text><text x="478.0" y="152.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">dropout 0.5</text><text x="478.0" y="164.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">P(Abnormal)</text></svg></div>
+</section>
+
+<section class="newpage">
+<h2>The models one by one</h2>
+<table class="t">
+  <tr><th style="width:17%">Model</th><th>What it does, in plain words</th><th class="n">Parameters</th><th class="n">MACs per clip</th></tr>
+  <tr><td><span class="dot" style="background:var(--lstm)"></span><b>lstm_base</b></td><td>Two LSTM layers (256, then 128 units). The same model as the earlier project, so it is the reference.</td><td class="n">1,779,329</td><td class="n">35.4 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--tf)"></span><b>transformer_base</b></td><td>Shrinks each frame to 256 numbers, adds its position, runs 2 attention blocks with 4 "heads" (4 comparisons in parallel), then averages. Sized to match the LSTM.</td><td class="n">1,404,289</td><td class="n">28.0 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span><b>hybrid_base</b></td><td>LSTM (128) reads the frames in order, then 1 attention block, then averages.</td><td class="n">862,465</td><td class="n">17.2 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span><b>hybrid_attn</b></td><td>New design (see below): shrink each frame to 128, LSTM (128), 1 attention block, then attention pooling plus max pooling.</td><td class="n">444,930</td><td class="n">8.6 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span><b>hybrid_lite</b></td><td>The same design at half the width (64), for the low-cost end.</td><td class="n">156,994</td><td class="n">3.0 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--base)"></span><b>pool_mean</b></td><td>No temporal model: the average of the 20 frame descriptions goes straight to the classifier.</td><td class="n">82,049</td><td class="n">0.08 M</td></tr>
+  <tr><td><span class="dot" style="background:var(--base)"></span><b>pool_max</b></td><td>No temporal model: for each of the 1,280 numbers, the largest value over the 20 frames.</td><td class="n">82,049</td><td class="n">0.08 M</td></tr>
+</table>
+<p class="tcap"><b>Parameters</b> are the numbers the model learns. <b>MACs</b> (multiply-accumulate operations) count the
+arithmetic needed for one clip; they do not depend on the computer. Both exclude the shared MobileNetV2, which
+costs about 300 M MACs per frame for every model alike.</p>
+
+<h2>The new hybrid design: hybrid_attn and hybrid_lite</h2>
+<p>These were designed around what the task looks like. An Abnormal finding is mostly a matter of <b>how the
+ear canal looks</b>, and as the camera moves it may be visible in <b>only some of the frames</b>. Averaging all
+frames dilutes such a finding, so the design picks out the informative frames instead.</p>
+<div class="diagram"><svg viewBox="0 0 610 146" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="hybrid_attn design"><defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#858585"/></marker></defs><rect x="4" y="43" width="76" height="64" rx="8" fill="#ECECEC" stroke="#BDBDBD" stroke-width="1"/><text x="42.0" y="65.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#233039">20 frames</text><text x="42.0" y="80.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">1,280</text><text x="42.0" y="92.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">numbers each</text><line x1="82" y1="75" x2="94" y2="75" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="96" y="43" width="76" height="64" rx="8" fill="#fff" stroke="#BDBDBD" stroke-width="1"/><text x="134.0" y="65.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#233039">Shrink</text><text x="134.0" y="80.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">to 128</text><text x="134.0" y="92.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#444">per frame</text><line x1="174" y1="75" x2="186" y2="75" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="188" y="43" width="76" height="64" rx="8" fill="#E69138" stroke="#E69138" stroke-width="1"/><text x="226.0" y="59.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#fff">LSTM</text><text x="226.0" y="74.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#fff">128 units,</text><text x="226.0" y="86.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#fff">order and</text><text x="226.0" y="98.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#fff">context</text><line x1="266" y1="75" x2="278" y2="75" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="280" y="28" width="108" height="94" rx="9" fill="#E3ECFB" stroke="#3C78D8" stroke-width="1"/><text x="334" y="45" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.8" font-weight="700" fill="#233039">Attention</text><path d="M302,88 Q313.0,78.1 324,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><path d="M302,88 Q324.0,68.2 346,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><path d="M302,88 Q335.0,58.3 368,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><path d="M324,88 Q335.0,78.1 346,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><path d="M324,88 Q346.0,68.2 368,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><path d="M346,88 Q357.0,78.1 368,88" fill="none" stroke="#3C78D8" stroke-opacity="0.55" stroke-width="1.2"/><circle cx="302" cy="92" r="5.5" fill="#3C78D8" stroke="#fff" stroke-width="1"/><circle cx="324" cy="92" r="5.5" fill="#3C78D8" stroke="#fff" stroke-width="1"/><circle cx="346" cy="92" r="5.5" fill="#3C78D8" stroke="#fff" stroke-width="1"/><circle cx="368" cy="92" r="5.5" fill="#3C78D8" stroke="#fff" stroke-width="1"/><text x="334" y="113" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.2" fill="#444">all frame pairs</text><line x1="390" y1="67" x2="406" y2="40" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="390" y1="83" x2="406" y2="110" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="408" y="12" width="104" height="56" rx="8" fill="#D9EAD3" stroke="#6AA84F" stroke-width="1"/><text x="460.0" y="30.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.4" font-weight="700" fill="#233039">Attention pool</text><text x="460.0" y="44.8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.2" fill="#444">learned weight</text><text x="460.0" y="56.6" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.2" fill="#444">per frame</text><rect x="408" y="82" width="104" height="56" rx="8" fill="#D9EAD3" stroke="#6AA84F" stroke-width="1"/><text x="460.0" y="100.0" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.4" font-weight="700" fill="#233039">Max pool</text><text x="460.0" y="114.8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.2" fill="#444">strongest</text><text x="460.0" y="126.6" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.2" fill="#444">single frame</text><line x1="514" y1="40" x2="528" y2="69" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><line x1="514" y1="110" x2="528" y2="81" stroke="#858585" stroke-width="1.4" marker-end="url(#ah2)"/><rect x="530" y="43" width="76" height="64" rx="8" fill="#233039" stroke="#233039" stroke-width="1"/><text x="568.0" y="70.8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.4" font-weight="700" fill="#D7AC54">Classifier</text><text x="568.0" y="85.8" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.4" fill="#f2f2f2">P(Abnormal)</text></svg></div>
+<ul class="dash">
+  <li><b>Shrink first:</b> the LSTM works on 128 numbers instead of 1,280, so it costs half of hybrid_base.</li>
+  <li><b>Attention pooling:</b> instead of a plain average, the model learns a weight for each frame and takes a
+      weighted average, so informative frames count more.</li>
+  <li><b>Max pooling:</b> keeps the strongest response seen in any single frame, so a brief finding is not lost.</li>
+</ul>
+
+<h2>Why include models with no temporal model?</h2>
+<p>pool_mean and pool_max ignore the order of the frames completely. They are <b>controls</b>: if they score as
+well as the LSTM and Transformer, then reading the frames in order adds nothing for this task, and the cheapest
+model is the sensible choice. They are not part of the main LSTM vs Transformer test.</p>
+
+<!-- ============================== 7 ============================== -->
+<h1><span class="n">7</span>Training and testing</h1>
+<h2>Splitting the data: 3-fold cross-validation, twice</h2>
+<p>The 874 videos are split into <b>3 equal parts (folds)</b>, keeping the share of Abnormal videos the same in
+each. A model is trained on two parts and tested on the third, three times, so that every video is tested
+exactly once. The whole procedure is repeated with a second random split (two "seeds"). Every model gets
+<b>6 test results</b>, on exactly the same videos as every other model, so the models can be compared fold by fold.</p>
+<table class="t">
+  <tr><th>Part of each fold</th><th class="n">Videos</th><th class="n">Abnormal</th><th>Used for</th></tr>
+  <tr><td>Training</td><td class="n">494 to 495</td><td class="n">131</td><td>Learning the model</td></tr>
+  <tr><td>Validation (15% of the training part)</td><td class="n">88</td><td class="n">23</td><td>Deciding when to stop, choosing decision cut-offs</td></tr>
+  <tr><td>Test</td><td class="n">291 to 292</td><td class="n">77</td><td>Final score only; never seen during training</td></tr>
+</table>
+</section>
+
+<section class="newpage">
+<h2>Training rules (identical for every model)</h2>
+<ul class="dash">
+  <li><b>Balanced weights:</b> mistakes on Abnormal videos count 1.89 times, on Normal videos 0.68 times, so the
+      model cannot win by always answering Normal.</li>
+  <li><b>Batches and epochs:</b> 32 videos per training step; at most 100 passes over the data (epochs).</li>
+  <li><b>Early stopping:</b> after each epoch the model is scored on the validation videos; training stops when the
+      score has not improved for 15 epochs, and the best version is kept. The learning speed is halved after 5
+      epochs without improvement.</li>
+  <li><b>Optimiser settings follow standard practice for each family:</b> the LSTM and the pooling models use Adam
+      at learning rate 0.001; models with attention use AdamW at 0.0003 with a 5-epoch warm-up, the usual recipe
+      for attention models.</li>
+  <li><b>Machine:</b> Intel Core i5-12450H laptop, CPU only, 4 threads. All 42 runs took about 18 minutes in total.</li>
+</ul>
+<div class="box soft">
+  <div class="boxtitle">A small fix that mattered</div>
+  The training library's built-in AUROC is an approximation. On a first, failed dataset it read 0.52 where the true
+  value was 0.41, which can make early stopping keep the wrong epoch. Early stopping now uses the <b>exact</b>
+  validation AUROC.
+</div>
+
+<!-- ============================== 8 ============================== -->
+<h1><span class="n">8</span>How we measure</h1>
+<h2>Accuracy: the main score and the screening scores</h2>
+<div class="row rowwrap">
+  <div class="col box peach">
+    <div class="boxtitle">AUROC: the main score</div>
+    Take one random Abnormal video and one random Normal video. AUROC is how often the model gives the Abnormal
+    one the higher score. <b>0.5</b> is a coin flip, <b>1.0</b> is perfect. It does not depend on any cut-off and is
+    not fooled by the 3-to-1 imbalance.
+  </div>
+  <div class="col box blue">
+    <div class="boxtitle">Sensitivity at 90% specificity</div>
+    The screening number: the share of Abnormal videos caught when the cut-off is set so that only <b>1 in 10
+    Normal videos</b> is wrongly flagged. Missing an Abnormal video is the costlier mistake, so this matters.
+  </div>
+</div>
+<p>A model outputs a probability. To get a yes/no answer we need a <b>cut-off</b>, and the yes/no scores depend on
+it. We report three cut-offs, the last two chosen on validation videos only and then applied unchanged to test:</p>
+<table class="t">
+  <tr><th style="width:26%">Cut-off</th><th>How it is set</th></tr>
+  <tr><td><b>0.5</b></td><td>The default: probability 0.5 or more means Abnormal.</td></tr>
+  <tr><td><b>Balanced (Youden)</b></td><td>The point that best balances catching Abnormal videos and clearing Normal ones.</td></tr>
+  <tr><td><b>High sensitivity</b></td><td>The point that catches 95% of the Abnormal validation videos ("do not miss cases").</td></tr>
+</table>
+<p>At each cut-off we report <b>accuracy</b> (share of all videos right), <b>recall</b> or sensitivity (share of Abnormal
+videos caught), <b>specificity</b> (share of Normal videos cleared), <b>precision</b> (of the videos flagged Abnormal, the
+share that really are) and <b>NPV</b> (of the videos cleared, the share that really are Normal).</p>
+
+<h2>Statistics: is a difference real?</h2>
+<ul class="dash">
+  <li><b>Paired comparison.</b> Each model is compared with lstm_base fold by fold, on the same test videos.</li>
+  <li><b>Corrected t-test.</b> The training parts of different folds overlap, which makes ordinary tests too
+      confident. The Nadeau and Bengio correction widens the uncertainty to account for this.</li>
+  <li><b>Equivalence test.</b> "No significant difference" does not prove two models are equal. Proving
+      equality needs a margin fixed in advance: if the 90% confidence interval of the AUROC difference lies entirely
+      inside <b>+/- 0.03</b>, the models are called <b>equivalent</b>.</li>
+</ul>
+
+<h2>Compute: how the speed was timed</h2>
+<ul class="dash">
+  <li>Each measurement runs in a <b>fresh program</b>, so settings and memory from one model cannot affect another.</li>
+  <li>Each model is called <b>50 times to warm up</b>, then timed over <b>300 calls</b>; the median is reported.</li>
+  <li>Everything is repeated in <b>3 sessions</b> in shuffled order, on a plugged-in laptop.</li>
+  <li>Settings: one clip at a time (<b>batch 1</b>, the screening case) and 32 at a time; <b>1 and 8</b> processor threads.</li>
+  <li>The input is random numbers: speed does not depend on what the model has learned, so no retraining is needed.</li>
+  <li>The shared front end (decoding the video, preparing frames, MobileNetV2) is timed separately.</li>
+</ul>
+</section>
+
+<!-- ============================== 9 ============================== -->
+<section class="newpage">
+<h1><span class="n">9</span>Results: accuracy</h1>
+<table class="t">
+  <tr><th>Model</th><th class="n">AUROC</th><th class="n">Sensitivity at 90% specificity</th><th class="n">AUPRC</th><th class="n">Training time per fold</th></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span>hybrid_attn</td><td class="n"><b>0.909</b> +/- 0.016</td><td class="n"><b>0.760</b> +/- 0.066</td><td class="n">0.795</td><td class="n">27 s</td></tr>
+  <tr class="ref"><td><span class="dot" style="background:var(--lstm)"></span>lstm_base (reference)</td><td class="n">0.907 +/- 0.013</td><td class="n">0.749 +/- 0.045</td><td class="n">0.787</td><td class="n">38 s</td></tr>
+  <tr><td><span class="dot" style="background:var(--tf)"></span>transformer_base</td><td class="n">0.905 +/- 0.011</td><td class="n">0.699 +/- 0.061</td><td class="n">0.778</td><td class="n">35 s</td></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span>hybrid_base</td><td class="n">0.905 +/- 0.010</td><td class="n">0.701 +/- 0.037</td><td class="n">0.763</td><td class="n">25 s</td></tr>
+  <tr><td><span class="dot" style="background:var(--hyb)"></span>hybrid_lite</td><td class="n">0.900 +/- 0.022</td><td class="n">0.684 +/- 0.106</td><td class="n">0.773</td><td class="n">23 s</td></tr>
+  <tr><td><span class="dot" style="background:var(--base)"></span>pool_mean</td><td class="n">0.900 +/- 0.009</td><td class="n">0.665 +/- 0.079</td><td class="n">0.764</td><td class="n">9 s</td></tr>
+  <tr><td><span class="dot" style="background:var(--base)"></span>pool_max</td><td class="n">0.893 +/- 0.017</td><td class="n">0.639 +/- 0.102</td><td class="n">0.755</td><td class="n">9 s</td></tr>
+</table>
+<p class="tcap">Mean +/- standard deviation over the 6 test folds (291 videos each, 77 Abnormal). AUPRC is a second
+ranking score that focuses on the Abnormal class.</p>
+
+<figure>
+  <img src="../../graphs/01_pareto_auroc_vs_latency.svg" alt="AUROC against CPU latency">
+  <figcaption><b>Figure 1.</b> Accuracy against CPU time per clip (temporal model and classifier only, one clip, one thread).</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> Further right means slower; higher means more accurate. The grey band is
+lstm_base's score +/- 0.03, the margin for "equivalent". <b>Every model sits inside the band</b>, even though the
+fastest is about 16 times quicker than the slowest. The dashed line joins the models that no other model beats on
+both speed and accuracy (the Pareto front): pool_mean, hybrid_lite and hybrid_attn. The vertical bars show how much
+each score varies across folds; they overlap almost completely.</div>
+</section>
+
+<section class="newpage">
+<figure>
+  <img src="../../graphs/06_equivalence_vs_lstm.svg" alt="Equivalence with lstm_base">
+  <figcaption><b>Figure 2.</b> Each model's AUROC minus lstm_base's, with its 90% confidence interval.</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> The dot is the average difference; the line is the range the true
+difference most likely lies in. A model is <b>equivalent</b> to the LSTM when its whole line fits inside the grey
++/- 0.03 band. transformer_base, hybrid_attn and pool_mean pass. The other three are not worse; their lines are
+simply too wide to prove equality with 6 folds.</div>
+
+<table class="t">
+  <tr><th>Model vs lstm_base</th><th class="n">Difference</th><th class="n">p-value</th><th class="n">90% interval</th><th>Verdict</th></tr>
+  <tr><td>transformer_base</td><td class="n">-0.001</td><td class="n">0.87</td><td class="n">-0.019 to +0.016</td><td><span class="verdict v-yes">Equivalent</span></td></tr>
+  <tr><td>hybrid_attn</td><td class="n">+0.002</td><td class="n">0.86</td><td class="n">-0.018 to +0.022</td><td><span class="verdict v-yes">Equivalent</span></td></tr>
+  <tr><td>pool_mean</td><td class="n">-0.007</td><td class="n">0.43</td><td class="n">-0.024 to +0.010</td><td><span class="verdict v-yes">Equivalent</span></td></tr>
+  <tr><td>hybrid_base</td><td class="n">-0.002</td><td class="n">0.93</td><td class="n">-0.035 to +0.032</td><td><span class="verdict v-no">Not shown</span></td></tr>
+  <tr><td>hybrid_lite</td><td class="n">-0.007</td><td class="n">0.70</td><td class="n">-0.040 to +0.027</td><td><span class="verdict v-no">Not shown</span></td></tr>
+  <tr><td>pool_max</td><td class="n">-0.013</td><td class="n">0.26</td><td class="n">-0.035 to +0.008</td><td><span class="verdict v-no">Not shown</span></td></tr>
+</table>
+<p class="tcap">A p-value above 0.05 means no detectable difference. None of the six differs from the LSTM.</p>
+
+<div class="navybox">
+  <div class="boxtitle">Answer to Q1</div>
+  The Transformer and the LSTM are <b>equally accurate</b>: the difference is -0.001 AUROC and the whole 90% interval
+  (-0.019 to +0.016) lies inside the +/- 0.03 margin. <b>H0-acc is supported.</b>
+</div>
+
+<h2>Does frame order matter?</h2>
+<p>Hardly. pool_mean, which ignores the order of the frames, reaches 0.900 against 0.907 for the LSTM, with
+82 thousand parameters instead of 1.78 million and about 1/430 of the arithmetic. The finding is mostly about how a
+frame looks, not how frames change over time. The one hint in favour of temporal models appears in the screening
+view below.</p>
+<p>A note on stability: an earlier trial with 5 folds ranked hybrid_lite first; here it is mid-table. Rankings that
+change with the data split confirm that the small gaps between models are noise.</p>
+</section>
+
+<!-- ============================== 10 ============================== -->
+<section class="newpage">
+<h1><span class="n">10</span>Results: screening view</h1>
+<figure>
+  <img src="../../graphs/02_pareto_sensitivity_vs_latency.svg" alt="Sensitivity at 90% specificity against latency">
+  <figcaption><b>Figure 3.</b> Share of Abnormal videos caught while only 1 in 10 Normal videos is flagged, against CPU time per clip.</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> Higher is better. Here the models spread more: hybrid_attn (0.76) and
+lstm_base (0.75) catch more Abnormal videos than the pooling models (0.64 to 0.67). This is the only place where
+reading frames in order seems to help, but with 6 folds the gap is not statistically reliable (p = 0.11). It is a
+lead for future work, not a finding.</div>
+
+<h2>Yes/no decisions at the three cut-offs</h2>
+<table class="t">
+  <tr><th rowspan="2">Model</th><th colspan="3" style="text-align:center">Cut-off 0.5</th><th colspan="4" style="text-align:center">Balanced cut-off (from validation)</th></tr>
+  <tr><th class="n">Accuracy</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">Accuracy</th><th class="n">Precision</th><th class="n">Recall</th><th class="n">Specificity</th></tr>
+  <tr><td>lstm_base</td><td class="n">0.841</td><td class="n">0.755</td><td class="n">0.623</td><td class="n"><b>0.852</b></td><td class="n"><b>0.704</b></td><td class="n">0.792</td><td class="n"><b>0.873</b></td></tr>
+  <tr><td>transformer_base</td><td class="n">0.840</td><td class="n">0.705</td><td class="n">0.712</td><td class="n">0.838</td><td class="n">0.660</td><td class="n">0.816</td><td class="n">0.846</td></tr>
+  <tr><td>hybrid_base</td><td class="n">0.828</td><td class="n">0.707</td><td class="n">0.695</td><td class="n">0.835</td><td class="n">0.653</td><td class="n">0.816</td><td class="n">0.842</td></tr>
+  <tr><td>hybrid_attn</td><td class="n"><b>0.849</b></td><td class="n">0.745</td><td class="n">0.693</td><td class="n">0.844</td><td class="n">0.678</td><td class="n">0.801</td><td class="n">0.859</td></tr>
+  <tr><td>hybrid_lite</td><td class="n">0.825</td><td class="n">0.689</td><td class="n">0.732</td><td class="n">0.834</td><td class="n">0.669</td><td class="n">0.784</td><td class="n">0.852</td></tr>
+  <tr><td>pool_mean</td><td class="n">0.826</td><td class="n">0.641</td><td class="n">0.786</td><td class="n">0.824</td><td class="n">0.633</td><td class="n">0.805</td><td class="n">0.831</td></tr>
+  <tr><td>pool_max</td><td class="n">0.817</td><td class="n">0.641</td><td class="n">0.797</td><td class="n">0.822</td><td class="n">0.634</td><td class="n">0.794</td><td class="n">0.832</td></tr>
+</table>
+<p class="tcap">Means over 6 test folds. Always answering Normal would score accuracy 0.736.</p>
+<ul class="dash">
+  <li><b>Accuracy is 0.82 to 0.85 for every model</b>, only about 10 points above always answering Normal. That is why
+      it is reported but never used to decide.</li>
+  <li><b>At the 0.5 cut-off the models behave very differently.</b> The LSTM is cautious: precise (0.755) but it
+      catches only 62% of Abnormal videos (29 of 77 missed per fold). pool_mean is eager: it catches 79% but raises
+      more false alarms. This reflects where each model happens to place its probabilities, not how well it
+      separates the classes.</li>
+  <li><b>At the balanced cut-off they even out:</b> recall 0.78 to 0.82, specificity 0.83 to 0.87. This is the fair
+      comparison. Report validation-chosen cut-offs, not 0.5.</li>
+</ul>
+</section>
+
+<section class="newpage">
+<h2>Not missing Abnormal videos: the high-sensitivity cut-off</h2>
+<table class="t">
+  <tr><th>Model</th><th class="n">Recall</th><th class="n">Missed (of 77)</th><th class="n">Specificity</th><th class="n">False alarms (of 214)</th><th class="n">Precision</th><th class="n">NPV</th></tr>
+  <tr><td>pool_max</td><td class="n"><b>0.922</b></td><td class="n"><b>6.0</b></td><td class="n">0.657</td><td class="n">73.5</td><td class="n">0.498</td><td class="n">0.960</td></tr>
+  <tr><td>pool_mean</td><td class="n">0.909</td><td class="n">7.0</td><td class="n">0.696</td><td class="n">65.2</td><td class="n">0.522</td><td class="n">0.957</td></tr>
+  <tr><td>transformer_base</td><td class="n">0.887</td><td class="n">8.7</td><td class="n">0.732</td><td class="n">57.5</td><td class="n">0.563</td><td class="n">0.952</td></tr>
+  <tr><td>hybrid_base</td><td class="n">0.885</td><td class="n">8.8</td><td class="n"><b>0.756</b></td><td class="n"><b>52.3</b></td><td class="n">0.571</td><td class="n">0.950</td></tr>
+  <tr><td>lstm_base</td><td class="n">0.879</td><td class="n">9.3</td><td class="n">0.753</td><td class="n">53.0</td><td class="n"><b>0.579</b></td><td class="n">0.949</td></tr>
+  <tr><td>hybrid_lite</td><td class="n">0.870</td><td class="n">10.0</td><td class="n">0.742</td><td class="n">55.3</td><td class="n">0.554</td><td class="n">0.944</td></tr>
+  <tr><td>hybrid_attn</td><td class="n">0.868</td><td class="n">10.2</td><td class="n">0.755</td><td class="n">52.5</td><td class="n">0.574</td><td class="n">0.944</td></tr>
+</table>
+<p class="tcap">Cut-off chosen on validation to catch 95% of Abnormal videos, then applied to test. Counts are per test fold.</p>
+<ul class="dash">
+  <li><b>On new videos, 87% to 92% of Abnormal videos are caught</b> (6 to 10 missed per 77). The 95% target is not
+      fully reached because the validation set holds only 23 Abnormal videos.</li>
+  <li><b>The price is false alarms:</b> roughly every second flagged video is actually Normal (precision 0.50 to 0.58).</li>
+  <li><b>A cleared video is Normal 95% of the time</b> (NPV about 0.95 for every model). For a tool that rules videos
+      out, this is the key number.</li>
+  <li>No temporal model clearly improves the miss rate. Catching more without more false alarms most likely needs
+      better frame features, not a different temporal model.</li>
+</ul>
+
+<div class="box soft">
+  <div class="boxtitle">Are the probabilities trustworthy?</div>
+  Not as they are. Abnormal videos receive an average probability of only 0.62 to 0.70, Normal videos 0.09 to 0.26.
+  The models rank videos well (high AUROC) but their probabilities are too low, which is another reason the 0.5
+  cut-off misbehaves. pool_mean is the best calibrated (Brier score 0.118; lower is better). Before showing
+  probabilities to a clinician they should be recalibrated on validation data.
+</div>
+
+<!-- ============================== 11 ============================== -->
+<h1><span class="n">11</span>Results: compute</h1>
+<table class="t">
+  <tr><th>Model</th><th class="n">1 clip, 1 thread</th><th class="n">1 clip, 8 threads</th><th class="n">32 clips, 8 threads</th><th class="n">Best clips per second</th><th class="n">vs lstm_base</th></tr>
+  <tr class="ref"><td>lstm_base</td><td class="n">3.54 ms</td><td class="n">5.82 ms</td><td class="n">18.9 ms</td><td class="n">1,693</td><td class="n">reference</td></tr>
+  <tr><td>hybrid_base</td><td class="n">2.12 ms</td><td class="n">3.83 ms</td><td class="n">11.6 ms</td><td class="n">2,753</td><td class="n">1.7x faster</td></tr>
+  <tr><td>transformer_base</td><td class="n">1.36 ms</td><td class="n">2.02 ms</td><td class="n">19.1 ms</td><td class="n">1,677</td><td class="n"><b>2.6x faster</b></td></tr>
+  <tr><td>hybrid_attn</td><td class="n">1.11 ms</td><td class="n">1.50 ms</td><td class="n">8.5 ms</td><td class="n">3,761</td><td class="n">3.2x faster</td></tr>
+  <tr><td>hybrid_lite</td><td class="n">0.92 ms</td><td class="n">1.31 ms</td><td class="n">4.8 ms</td><td class="n">8,476</td><td class="n">3.9x faster</td></tr>
+  <tr><td>pool_max</td><td class="n">0.25 ms</td><td class="n">0.21 ms</td><td class="n">0.4 ms</td><td class="n">80,211</td><td class="n">14x faster</td></tr>
+  <tr><td>pool_mean</td><td class="n">0.22 ms</td><td class="n">0.23 ms</td><td class="n">0.4 ms</td><td class="n">82,199</td><td class="n">16x faster</td></tr>
+</table>
+<p class="tcap">Temporal model and classifier only; median of 3 sessions. Memory use was 330 to 410 MB for every
+model, almost all of it the software library itself.</p>
+</section>
+
+<section class="newpage">
+<figure>
+  <img src="../../graphs/04_latency_by_model.svg" alt="Latency per model">
+  <figcaption><b>Figure 4.</b> CPU time per clip for each model, one clip at a time, on 1 and on 8 threads.</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> Shorter bars are faster. The Transformer needs 1.36 ms against the
+LSTM's 3.54 ms, because it processes all 20 frames together while the LSTM must step through them. The right panel
+shows a surprise: <b>8 threads are slower than 1</b> for a single clip. The work is too small to split, so
+coordinating the threads costs more than it saves. The temporal model should run on one thread.</div>
+
+<div class="navybox">
+  <div class="boxtitle">Answer to Q2</div>
+  For one clip at a time, the Transformer is <b>2.6 times faster</b> than the LSTM on 1 thread and 2.9 times faster on
+  8 threads, in all 3 timing sessions. <b>H0-cpu holds</b>: the Transformer is not slower; it is clearly faster. When
+  32 clips are processed together on 8 threads, the two are equal (18.9 vs 19.1 ms).
+</div>
+
+<figure>
+  <img src="../../graphs/05_end_to_end_breakdown.svg" alt="End-to-end cost per clip">
+  <figcaption><b>Figure 5.</b> The full cost of one clip: decoding the video, preparing frames, MobileNetV2, then the temporal model.</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> Each bar is the total time to classify one clip. The grey parts are the same
+for every model: decoding the video (about 145 ms) and running MobileNetV2 on 20 frames (about 312 ms). The coloured
+temporal model is the thin sliver at the end: <b>under 1% of the total</b>. A clip takes about 465 ms with the LSTM and
+462 ms with the Transformer. The speed gap that looks large in Figure 4 almost disappears in practice.</div>
+</section>
+
+<section class="newpage">
+<figure>
+  <img src="../../graphs/03_auroc_vs_macs.svg" alt="AUROC against MACs">
+  <figcaption><b>Figure 6.</b> Accuracy against the amount of arithmetic per clip (MACs), which does not depend on the computer.</figcaption>
+</figure>
+<div class="figread"><b>How to read it.</b> The same picture as Figure 1 with a hardware-independent cost axis.
+Arithmetic spans more than 400 times (0.08 M to 35 M), yet accuracy stays flat. Note that measured time does not
+shrink in proportion: pool_mean has 430 times less arithmetic than the LSTM but is "only" 16 times faster, because
+every call has a fixed overhead that dominates for tiny models.</div>
+
+<!-- ============================== 12 ============================== -->
+<h1><span class="n">12</span>What it means</h1>
+<table class="t">
+  <tr><th style="width:30%">Hypothesis</th><th>Result</th><th style="width:16%">Verdict</th></tr>
+  <tr><td><b>H0-acc:</b> Transformer and LSTM are equally accurate</td><td>Difference -0.001 AUROC; 90% interval inside +/- 0.03</td><td><span class="verdict v-yes">Supported</span></td></tr>
+  <tr><td><b>H0-cpu:</b> Transformer is no slower per clip</td><td>2.6x faster on 1 thread, 2.9x on 8 threads; equal at batch 32</td><td><span class="verdict v-yes">Supported</span></td></tr>
+</table>
+
+<div class="row rowwrap">
+  <div class="col box peach">
+    <div class="boxtitle">There is no trade-off here</div>
+    A trade-off would mean paying more compute for more accuracy. Instead, accuracy is flat while compute varies
+    16-fold in time and 430-fold in arithmetic. The Transformer is both <b>as accurate and cheaper</b> than the LSTM,
+    so it is the better temporal model for one-clip-at-a-time use on a CPU.
+  </div>
+  <div class="col box blue">
+    <div class="boxtitle">But the temporal model is not where the cost is</div>
+    End to end, the temporal model is under 1% of the time. Decoding the video and running the image network
+    dominate. To make screening faster, use <b>fewer frames</b> or a <b>lighter image network</b>; switching LSTM to
+    Transformer saves only about 2 ms per clip.
+  </div>
+</div>
+
+<h2>Which model to use</h2>
+<ul class="dash">
+  <li><b>Best all-round: hybrid_attn.</b> Joint-best AUROC (0.909), best sensitivity at 90% specificity (0.76), best
+      accuracy at the default cut-off, and 3.2 times faster than the LSTM. Its design (pick out informative frames)
+      matches the task.</li>
+  <li><b>Cheapest acceptable: pool_mean.</b> Equivalent AUROC at 0.22 ms per clip, 16 times faster than the LSTM, and the
+      best-calibrated probabilities; but about 8 points lower on sensitivity at 90% specificity.</li>
+  <li><b>Between the two classic models: transformer_base.</b> Same accuracy as lstm_base, fewer parameters, faster.</li>
+</ul>
+
+<h2>Why the models agree</h2>
+<p>The Abnormal finding is mainly visible in how individual frames look. Once a strong, fixed image network has
+described each frame, deciding from the 20 descriptions is an easy last step, and any reasonable temporal model
+(or none) does it equally well. The limit on accuracy is set by the frame features, not by the temporal model.</p>
+
+<!-- ============================== 13-14 ============================== -->
+<h1><span class="n">13</span>Limitations</h1>
+<ul class="dash">
+  <li><b>Six folds</b> give wide uncertainty: some models could not be shown equivalent, and the screening-view gap
+      could not be confirmed. A third seed would narrow this.</li>
+  <li><b>Only 20 frames</b> were tested, so the effect of the number of frames remains open.</li>
+  <li><b>No patient ID:</b> repeat videos of one child may sit in both training and test folds. This affects all models
+      alike, so the comparison is fair, but the absolute scores may be slightly optimistic.</li>
+  <li><b>One laptop:</b> timings are from a single Intel i5-12450H. Other processors will give other numbers, though the
+      ordering should hold.</li>
+  <li><b>End-to-end time</b> adds separately measured parts (decode, preparation, image network, temporal model)
+      rather than timing one combined program.</li>
+  <li><b>Frozen ImageNet features</b> were used throughout; a network trained on ear images could change the absolute
+      accuracy, though not the fairness of the comparison.</li>
+</ul>
+
+<h1><span class="n">14</span>Conclusion</h1>
+<p>Under a strict fair-test design, with identical inputs, splits, classifier and training rules, the LSTM and the
+Transformer are <b>equally accurate</b> for classifying pediatric ear videos, and the Transformer is <b>2.6 times
+faster</b> per clip on a CPU. A new hybrid, hybrid_attn, matches the best accuracy at a third of the LSTM's cost, and
+even a model that ignores frame order performs equivalently. The expected compute-versus-accuracy trade-off does not
+appear: the cheaper models lose nothing. In a full screening pipeline the temporal model accounts for under 1% of the
+time, so future savings should come from fewer frames or a lighter image network, and future accuracy gains from
+better frame features.</p>
+</section>
+
+<!-- ============================== APPENDICES ============================== -->
+<section class="newpage">
+<h1><span class="n">A</span>Glossary</h1>
+<dl class="gl">
+  <dt>Temporal model</dt><dd>The part of the model that combines the frames of a clip into one decision.</dd>
+  <dt>LSTM</dt><dd>Long Short-Term Memory network: reads frames one by one, keeping a learned memory.</dd>
+  <dt>Transformer</dt><dd>Reads all frames at once; attention compares every frame with every other.</dd>
+  <dt>Attention</dt><dd>A learned way of deciding how much each frame should draw on the others.</dd>
+  <dt>Hybrid</dt><dd>An LSTM followed by an attention block.</dd>
+  <dt>Pooling</dt><dd>Combining frames by a simple rule: average (mean), maximum, or a learned weighted average.</dd>
+  <dt>MobileNetV2</dt><dd>A small image network trained on everyday photos, used frozen to describe each frame with 1,280 numbers.</dd>
+  <dt>Frozen</dt><dd>Not trained further; its output never changes.</dd>
+  <dt>T</dt><dd>Number of frames taken from each video (20 here).</dd>
+  <dt>Parameters</dt><dd>The numbers a model learns during training.</dd>
+  <dt>MACs</dt><dd>Multiply-accumulate operations: the arithmetic needed for one clip.</dd>
+  <dt>Latency</dt><dd>Time to process one clip, in milliseconds (ms).</dd>
+  <dt>Batch</dt><dd>How many clips are processed together in one call.</dd>
+  <dt>Thread</dt><dd>One stream of work on the processor; this laptop can run 12 at once.</dd>
+  <dt>Epoch</dt><dd>One full pass over the training videos.</dd>
+  <dt>Early stopping</dt><dd>Stopping training when the validation score stops improving, keeping the best version.</dd>
+  <dt>Fold / cross-validation</dt><dd>Splitting the data into parts and rotating which part is used for testing.</dd>
+  <dt>Validation set</dt><dd>Videos held out from training to decide when to stop and where to set cut-offs.</dd>
+  <dt>AUROC</dt><dd>How often an Abnormal video is ranked above a Normal one; 0.5 is chance, 1.0 is perfect.</dd>
+  <dt>AUPRC</dt><dd>A ranking score focused on the Abnormal class.</dd>
+  <dt>Cut-off</dt><dd>Probability above which a clip is called Abnormal.</dd>
+  <dt>Recall (sensitivity)</dt><dd>Share of Abnormal videos that are caught.</dd>
+  <dt>Specificity</dt><dd>Share of Normal videos that are correctly cleared.</dd>
+  <dt>Precision</dt><dd>Of the videos flagged Abnormal, the share that really are.</dd>
+  <dt>NPV</dt><dd>Of the videos cleared as Normal, the share that really are.</dd>
+  <dt>Calibration</dt><dd>Whether a predicted probability of 0.7 really means a 70% chance.</dd>
+  <dt>p-value</dt><dd>How surprising the observed difference would be if the models were truly equal; above 0.05 means no detectable difference.</dd>
+  <dt>Equivalence test</dt><dd>Shows two models are equal within a margin fixed in advance (+/- 0.03 AUROC here).</dd>
+  <dt>Pareto front</dt><dd>The models that no other model beats on both speed and accuracy.</dd>
+</dl>
+
+</section>
+
+</body>
+</html>
