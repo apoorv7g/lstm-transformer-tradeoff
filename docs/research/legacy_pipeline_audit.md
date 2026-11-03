@@ -42,7 +42,8 @@ Environment (`venv`): Python 3.11.5, TensorFlow 2.17.0, Keras 3.6.0, OpenCV 4.10
 
 ## 2. What we reuse
 
-- **The data** (ear as primary), unchanged. We copy or symlink it into `data/raw/ear/`.
+- **The data**: the oral set only, unchanged, copied into `data/raw/oral/`. The ear set was
+  dropped on 3 Nov 2026.
 - **The architecture idea**, kept exactly as our `lstm_base` preset:
   frozen MobileNetV2 → GAP → LSTM(256) → LSTM(128) → Dense(64) → Dropout(0.5) → sigmoid.
 - **Uniform `linspace` frame sampling with T = 20** as the default sequence length.
@@ -63,15 +64,16 @@ off-distribution.
 
 ### 3.2 [High] BGR fed as RGB
 `cv2.VideoCapture.read()` returns BGR, and it is never converted. The ImageNet weights expect RGB.
-For otoscopy (red/orange-dominated tympanic membrane) the channel swap is not harmless.
+For oral-cavity video (red/pink-dominated mucosa) the channel swap is not harmless.
 **Fix:** `cv2.cvtColor(..., COLOR_BGR2RGB)`.
 
 ### 3.3 [High] About 21 GB float64 in-memory dataset
 All videos are loaded into one `np.array` of `frame / 255.0`, which is float64.
-Ear at T = 20: 874 × 20 × 224 × 224 × 3 × 8 B ≈ **21 GB**. The 16 GB laptop either swaps heavily
+Oral at T = 20 (`dl_model_2.py`): 535 × 20 × 224 × 224 × 3 × 8 B ≈ **12.9 GB**, and at T = 50
+(`dl_model_2_2.0.py`) ≈ **32 GB**. The 16 GB laptop either swaps heavily
 or crashes, and this probably explains slow or failed runs.
 **Fix:** uint8 frames, streamed per video into the backbone. Only the 1280-d features are kept
-(≈ 179 MB at T = 40).
+(≈ 110 MB at T = 40).
 
 ### 3.4 [High] Evaluation leakage in `ConfusionMatrix.py` / `tfboard1.py` / `tests/*`
 These scripts run one fold's model over **every** video in `labels.json`, and about 80% of those

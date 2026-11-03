@@ -99,7 +99,7 @@ h_t = f'_t ⊙ h_{t-1} + i'_t ⊙ h̃_t
 | Setting | Value | Note |
 |---|---|---|
 | Loss | Binary cross-entropy | Abnormal = 1 |
-| Class weights | `balanced` (≈ 0.68 Normal / 1.89 Abnormal on ear) | Legacy had none |
+| Class weights | `balanced` (≈ 0.59 Normal / 3.22 Abnormal on oral) | Legacy had none |
 | Optimiser | Adam, lr 1e-3, `clipnorm=1.0` | Clipping is standard for RNNs |
 | Batch size | 32 | Cached features make this cheap |
 | Max epochs | 100 | |
@@ -113,7 +113,7 @@ validation set of seed 0 only, then fix the value for all runs.
 
 ## 6. Expected behaviour / what to watch
 
-- On 600–700 training clips, `lstm_base` (1.78 M params) can overfit within about 10–20 epochs.
+- On about 364 training clips per fold, `lstm_base` (1.78 M params) can overfit within about 10–20 epochs.
   Watch train vs inner-val AUC, and expect early stopping to fire early.
 - BiLSTM doubles the sequential work per layer (two directions). Expect the **worst batch-1 CPU
   latency** among the LSTMs, despite fewer parameters than `lstm_base`.

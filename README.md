@@ -4,8 +4,8 @@ A controlled study of the trade-off between classification accuracy and CPU comp
 LSTM temporal model is replaced by a Transformer encoder, applied to short clinical screening
 videos labelled **Normal** or **Abnormal**.
 
-**Status (23 Oct 2026):**
-- Done: design phase, and the model definitions are implemented and verified.
+**Status (3 Nov 2026):**
+- Done: design phase, model definitions implemented and verified, dataset and environment set up.
 - In progress: feature extraction and the training pipeline.
 - See [Project status](#project-status).
 
@@ -53,19 +53,19 @@ Full motivation and scope:
 
 ## Dataset
 
-The primary dataset is pediatric otoscopy (ear) screening video from an existing curated pipeline.
+The dataset is pediatric oral-cavity screening video from an existing curated pipeline.
 
 | Property | Value |
 |---|---|
-| Videos | 874 |
-| Labels | 643 Normal / 231 Abnormal (majority-class accuracy 73.6%) |
+| Videos | 535 |
+| Labels | 452 Normal / 83 Abnormal (majority-class accuracy 84.5%) |
 | Resolution | 480 × 640 (portrait) |
-| Duration | median 13.8 s (range 5 to 43 s), mostly ~30 fps |
+| Duration | median 26.4 s (range 0.9 to 64 s), 24 to 1364 frames, median 23.6 fps |
+| Ages | 3 to 18 (median 10) |
 | Metadata | `labels.json`: `{id, interpretation, age}` |
 
-Two more sets are available for optional replication and robustness checks:
-- an oral-cavity set (535 videos)
-- a small external ear set (50 videos)
+Only 83 clips are Abnormal, so one test fold holds about 17 positives and its AUROC is noisy.
+Repeated cross-validation and paired tests matter more than usual.
 
 Abnormal is treated as the positive class throughout. The data is private clinical material and
 **is not included in this repository**. Details: [data pipeline design](docs/design/data_pipeline.md).
@@ -182,8 +182,8 @@ the table above.
 Place the dataset locally. The `data/` directory is excluded from version control.
 
 ```
-data/raw/ear/labels.json
-data/raw/ear/video-1.mp4 ... video-874.mp4
+data/raw/oral/labels.json
+data/raw/oral/video-*.mp4          (535 files)
 ```
 
 ## Workflow
@@ -193,8 +193,8 @@ The study runs as a sequence of steps, each driven by a config file in `configs/
 | Step | Purpose | Command | Status |
 |---|---|---|---|
 | 1. Verify models | Build all presets and check parameter counts | `python -m scripts.model_summary` | Implemented |
-| 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/ear_T40.npz` | `python -m src.data.extract_features --dataset ear --frames 40` | Planned |
-| 3. Create splits | Write stratified folds to `data/splits/ear_seed{0,1,2}.json` | `python -m src.data.splits --dataset ear` | Planned |
+| 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Planned |
+| 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Planned |
 | 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/runs/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Planned |
 | 5. Benchmark | Measure latency, memory and FLOPs on CPU | `python -m src.benchmark.run_grid` | Planned |
 | 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `notebooks/analysis.ipynb` | Planned |
@@ -252,7 +252,7 @@ Progress review slides:
 
 ## Scope and limitations
 
-- A single video type (otoscopy) is studied. The oral-cavity set is an optional replication.
+- A single video type (oral-cavity screening) is studied: 535 clips, only 83 of them Abnormal.
 - All benchmarks are CPU-only by design. GPU performance is out of scope.
 - The CNN backbone is frozen. End-to-end fine-tuning and video-native Transformers (ViViT,
   TimeSformer) are out of scope.

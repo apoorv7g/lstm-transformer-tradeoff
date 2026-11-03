@@ -1,6 +1,6 @@
 # Data + feature extraction config. See docs/design/data_pipeline.md.
-dataset: ear                      # primary; "oral" is optional replication
-raw_dir: data/raw/ear             # labels.json + video-*.mp4 (copied/symlinked from DL_test1/Task - 1 EAR/ear)
+dataset: oral                     # the only dataset (ear dropped 3 Nov 2026)
+raw_dir: data/raw/oral            # labels.json + video-*.mp4 (copied from DL_test1/Task - 2 ORAL/oral)
 features_dir: data/features
 splits_dir: data/splits
 
@@ -13,7 +13,7 @@ sampling:
   sequence_lengths: [10, 20, 40]
   method: uniform_linspace
   decode: sequential              # no cap.set() seeking
-  short_video: repeat_pad         # never silently drop
+  short_video: repeat_pad         # never silently drop (3 oral clips report < 40 frames)
 
 frames:
   size: [224, 224]

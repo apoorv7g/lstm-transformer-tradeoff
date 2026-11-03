@@ -2,7 +2,7 @@
 
 **Title:** Compute versus Accuracy Trade-off in LSTM and Transformers for Medical Video Classification
 **Type:** Course research project (Deep Learning). Proposal deck: `CacheMemory.pdf`.
-**Last updated:** 23 Oct 2026
+**Last updated:** 3 Nov 2026
 
 ---
 
@@ -23,8 +23,8 @@ clips, class imbalance. That is the question this project answers with numbers.
 
 ## What we are doing
 
-1. **One dataset, one task.** Binary Normal/Abnormal classification of pediatric **ear (otoscopy)
-   videos**: 874 clips, 643 Normal / 231 Abnormal. They come from an existing curated pipeline (the
+1. **One dataset, one task.** Binary Normal/Abnormal classification of pediatric **oral-cavity
+   screening videos**: 535 clips, 452 Normal / 83 Abnormal. They come from an existing curated pipeline (the
    earlier `DL_test1` project, which already had a working MobileNetV2 + LSTM model).
 2. **Freeze the spatial part.** Every frame goes through the same ImageNet MobileNetV2 and becomes a
    1280-d vector. We compute this once and cache it. The CNN is therefore identical for every

@@ -30,7 +30,7 @@ We deliberately change four things:
 | No projection; tokens are raw 1024-d CNN features | `Dense(1280 → d_model)` projection | Lets us size the model independently of the backbone and parameter-match the LSTM. In the example, `key_dim = embed_dim = 1024`, so the 4 attention matrices hold about 4.2 M of its 4.23 M params |
 | `key_dim = embed_dim` per head | `key_dim = d_model / num_heads` | Standard multi-head split, so params do not depend on the head count |
 | Post-LN (`x = LN(x + f(x))`) | **Pre-LN** (`x = x + f(LN(x))`) plus a final LN | Trains more stably without warm-up gymnastics on small data |
-| `GlobalMaxPooling1D` | `GlobalAveragePooling1D` (max available as an option) | Lower variance on small data; a CLS token would be one more thing to learn from ~600 clips |
+| `GlobalMaxPooling1D` | `GlobalAveragePooling1D` (max available as an option) | Lower variance on small data; a CLS token would be one more thing to learn from ~360 clips |
 | FFN width 4 (a bottleneck) | FFN = 2 × d_model, GELU | Conventional width |
 
 Positional encoding: **learned** absolute embeddings (T × d params), as in the Keras example and
@@ -145,6 +145,6 @@ state this choice explicitly.
 - If `transformer_deep` ≤ `transformer_base` on AUROC, that supports "capacity is not the
   bottleneck", which is consistent with H₀.
 - Inspect attention maps for a few clips (mean over heads). Do they focus on a few frames, for
-  example when the eardrum is in view? This is a qualitative figure for the presentation.
+  example when the relevant part of the mouth is in view? This is a qualitative figure for the presentation.
 - Smoke test (eager, batch 1, T = 20; **not a result**): `transformer_small` ≈ 116 ms,
   `transformer_base` ≈ 130 ms, `transformer_deep` ≈ 217 ms, `hybrid_base` ≈ 245 ms.

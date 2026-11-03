@@ -20,7 +20,8 @@ constraint.
 
 **Methods.**
 
-- *Data:* 874 pediatric otoscopy videos (643 Normal, 231 Abnormal; 480×640; median length 13.8 s).
+- *Data:* 535 pediatric oral-cavity screening videos (452 Normal, 83 Abnormal; 480×640; median
+  length 26.4 s).
   From each video, T ∈ {10, 20, 40} frames are sampled uniformly and encoded once by a frozen
   ImageNet MobileNetV2, giving 1280-d per-frame embeddings.
 - *Models:* on these identical inputs we train
@@ -46,14 +47,14 @@ constraint.
 short-clip medical video tasks on CPU⟩.
 
 **Keywords:** medical video classification, LSTM, Transformer, self-attention, compute efficiency,
-CPU inference, otoscopy, MobileNetV2, accuracy–efficiency trade-off.
+CPU inference, oral-cavity screening, MobileNetV2, accuracy–efficiency trade-off.
 
 ---
 
 ## Plain-language abstract
 
 Doctors and screening programmes increasingly use AI to read short medical videos, for example a
-camera looking inside a child's ear. Such a system first looks at each frame on its own, then
+camera looking inside a child's mouth. Such a system first looks at each frame on its own, then
 combines what it saw across the frames to reach a decision. There are two popular ways to do the
 "combining" step:
 

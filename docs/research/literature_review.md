@@ -111,7 +111,7 @@ Background references were cited from memory and should be checked before the pa
 2. **Small data, short sequences, frozen features → LSTM ≥ Transformer, or parity**: Soeleman 2022
    (LSTM won), Barros 2021 (LSTM strong on 185 videos), the Keras example's own caveat, and
    LREC 2022 (parity in limited data).
-3. **Our regime is clearly (2):** 874 clips, T ≤ 40, frozen MobileNetV2. So **H₀ (no accuracy
+3. **Our regime is clearly (2):** 535 clips, T ≤ 40, frozen MobileNetV2. So **H₀ (no accuracy
    advantage for the Transformer) is the literature-consistent null.** Rejecting it would be the
    surprising result.
 4. **Compute claims in the literature are mostly GPU-based or FLOP-based.** Few papers report

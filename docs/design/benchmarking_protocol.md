@@ -24,12 +24,12 @@ Code: `src/benchmark/` (planned). Config: `configs/benchmark.yaml`.
 
 | Metric | Role |
 |---|---|
-| **AUROC** | **Primary.** Threshold-free and robust to the 74/26 imbalance |
+| **AUROC** | **Primary.** Threshold-free and robust to the 85/15 imbalance |
 | Macro-F1 | Secondary, at threshold 0.5 |
 | Balanced accuracy | Secondary |
 | Sensitivity (Abnormal recall) and specificity | Clinical reporting |
 | AUPRC | Supplementary (imbalance-aware) |
-| Accuracy | Reported for comparison with legacy results only. **Majority baseline = 73.6% (ear), 84.5% (oral)** |
+| Accuracy | Reported for comparison with legacy results only. **Majority baseline = 84.5%** |
 
 Also store the out-of-fold probabilities for every video, for pooled ROC curves, McNemar's test and
 DeLong's test. Output per run goes to `results/runs/{model}_T{T}_s{seed}_f{fold}/`:

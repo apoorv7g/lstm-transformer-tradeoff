@@ -5,36 +5,40 @@ Goal: turn raw videos into a **single cached feature tensor** that every model c
 differ, the comparison is meaningless.
 
 ```
-data/raw/ear/labels.json + video-*.mp4
+data/raw/oral/labels.json + video-*.mp4
         │  src/data/video_io.py        sample_frames(path, T) -> uint8 (T, 224, 224, 3) RGB
         ▼
         │  src/data/extract_features.py  MobileNetV2(pooling="avg") on batches of frames
         ▼
-data/features/ear_T40.npz   {features: float32 (N, 40, 1280), labels: int8 (N,), ids: str (N,), ages: int (N,)}
+data/features/oral_T40.npz   {features: float32 (N, 40, 1280), labels: int8 (N,), ids: str (N,), ages: int (N,)}
         │  T=20 → features[:, ::2]   T=10 → features[:, ::4]   (subsample, no re-extraction)
         ▼
         │  src/data/splits.py          StratifiedKFold(5) × seeds, inner 15% stratified val
         ▼
-data/splits/ear_seed{0,1,2}.json   (committed: video ids only, no medical content)
+data/splits/oral_seed{0,1,2}.json   (committed: video ids only, no medical content)
 ```
 
 ---
 
-## 1. Source data (as found in DL_test1, measured 23 Oct)
+## 1. Source data (oral set; measured on all 535 videos, 3 Nov)
 
-| Set | Path in DL_test1 | Videos | Normal / Abnormal | Resolution (w×h) | Length (median, min–max) | FPS | Ages |
+| Set | Path in DL_test1 | Videos | Normal / Abnormal | Resolution (w×h) | Length (median, min–max) | FPS (median, range) | Ages |
 |---|---|---:|---|---|---|---|---|
-| **Ear (primary)** | `Task - 1 EAR/ear/` | 874 | 643 / 231 (73.6% / 26.4%) | 480×640 (portrait) | 13.8 s (5.2–43 s); 146–1263 frames | 14–30, mostly ~30 | 3–18, mostly 9–13 |
-| Oral (optional) | `Task - 2 ORAL/oral/` | 535 | 452 / 83 (84.5% / 15.5%) | 480×640 | 25.4 s (1.3–59.7 s); 24–1280 frames | 14–29 | 3–18 |
-| Ear external (optional) | `test/` | 50 | 29 Normal / 21 "Wax is present…" | 480×640 | 17.1 s (7–32 s) | 19–30 | 3–6 |
+| **Oral** | `Task - 2 ORAL/oral/` | 535 | 452 / 83 (84.5% / 15.5%) | 480×640 (portrait), all videos | 26.4 s (0.9–64 s); 24–1364 frames | 23.6 (13–30) | 3–18, median 10 |
 
-Size on disk: ear 2.6 GB, oral 3.2 GB. Lengths were measured on random samples of 80 videos per set.
+- Size on disk: 3.2 GB.
+- Measured from container metadata on all 535 videos. Header frame counts can be wrong, so the
+  extractor logs the frames it actually decodes.
+- Only 3 videos report fewer than 40 frames, and none fewer than 20.
+- Every `labels.json` entry has a matching file, and vice versa.
+- The ear set (874 videos) and the external ear test set were dropped on 3 Nov 2026 and are not
+  used.
 
 `labels.json` schema: `[{"id": "video-1.mp4", "interpretation": "Normal" | "Abnormal" | <free text>, "age": int}]`.
-- In the curated ear/oral sets every non-"Normal" interpretation is already mapped to "Abnormal".
-  `DL_test1/rename.py` did that mapping and renamed files to `video-N.mp4`.
-- The external `test/` set still holds free-text interpretations. Map anything other than "Normal"
-  to Abnormal.
+- In the curated oral set every non-"Normal" interpretation is already mapped to "Abnormal"
+  (verified: only these two values occur). `DL_test1/rename.py` did that mapping and renamed files
+  to `video-N.mp4`.
+- Defensive rule in code: map any interpretation other than "Normal" to Abnormal.
 - **There is no patient ID.** See the leakage risk in `docs/03_scope.md`.
 
 **Label convention (changed from legacy):** `Abnormal = 1` (positive class), `Normal = 0`.
@@ -63,7 +67,8 @@ Size on disk: ear 2.6 GB, oral 3.2 GB. Lengths were measured on random samples o
     ablation but is out of scope.
 - Return `uint8`. **Do not** divide by 255 or cast to float64 here.
   - Legacy `frame / 255.0` produced float64 arrays.
-  - 874 × 20 × 224 × 224 × 3 × 8 bytes ≈ **21 GB** in RAM, which exceeds our 16 GB machine.
+  - 535 × 20 × 224 × 224 × 3 × 8 bytes ≈ **12.9 GB** in RAM (≈ 32 GB at the legacy 50 frames),
+    which is most or all of our 16 GB machine.
 
 ## 3. Feature extraction: `src/data/extract_features.py`
 
@@ -89,8 +94,9 @@ feats = backbone.predict(x, batch_size=64)        # (T, 1280)
   - preprocessing flags
   - extraction date
   - per-video frame counts, pad flags and decode failures
-- Size: 874 × 40 × 1280 × 4 bytes ≈ **179 MB**. It fits in RAM easily.
-- Estimated cost: about 35k frames through MobileNetV2 on CPU, roughly 10–20 min, plus decode time.
+- Size: 535 × 40 × 1280 × 4 bytes ≈ **110 MB**. It fits in RAM easily.
+- Estimated cost: about 21k frames through MobileNetV2 on CPU, roughly 5–15 min, plus a
+  sequential decode of about 350k frames (oral clips are long, so decoding may dominate).
   This one-off cost replaces re-running the CNN on every epoch of every fold, which is what the
   legacy `TimeDistributed(base_model)` did. That change is what makes the full 90-run grid
   feasible on a laptop.
@@ -121,6 +127,6 @@ feats = backbone.predict(x, batch_size=64)        # (T, 1280)
 ## 5. Optional: grouped split sensitivity check
 
 `labels.json` has no patient ID. If consecutive IDs share the same age, they *might* be the same
-child (for example left and right ear). As a sensitivity analysis, form pseudo-groups from runs of
+child (for example retakes). As a sensitivity analysis, form pseudo-groups from runs of
 consecutive IDs with the same age and rerun one seed with `StratifiedGroupKFold`. Report it if the
 AUROC drops noticeably. This applies equally to both families.
