@@ -3,8 +3,6 @@
 # ---------------------------------------------------------------
 data/raw/**
 data/features/**
-!data/raw/README.md
-!data/features/README.md
 # split files contain video IDs only and ARE committed
 !data/splits/
 !data/splits/*.json
@@ -35,6 +33,11 @@ TensorBoard/
 events.out.tfevents.*
 results/**/model*
 results/**/*.keras
+# per-video outputs and local-only logs (CLAUDE.md: only aggregate metrics are committed)
+results/**/predictions.csv
+results/**/val_probs_per_epoch.npy
+results/**/attempts/
+results/logs/
 
 # ---------------------------------------------------------------
 # Python

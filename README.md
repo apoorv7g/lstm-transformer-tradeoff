@@ -6,8 +6,9 @@ videos labelled **Normal** or **Abnormal**.
 
 **Status (3 Nov 2026):**
 - Done: design phase, model definitions, dataset and environment, frame sampling, the cached
-  MobileNetV2 feature tensor (535 x 40 x 1280) and the shared cross-validation splits.
-- In progress: the training pipeline.
+  MobileNetV2 feature tensor (535 x 40 x 1280), the shared cross-validation splits, and the
+  training and benchmark code with detailed logging.
+- Next: the first training runs (nothing has been trained yet).
 - See [Project status](#project-status).
 
 ---
@@ -117,9 +118,9 @@ TensorFlow 2.17 / Keras 3.6.
 | `lstm_base` | LSTM(256) → LSTM(128) | 1,779,329 | 35.4 M |
 | `bilstm_base` | BiLSTM(128) → BiLSTM(64) | 1,615,489 | 32.1 M |
 | `transformer_small` | d = 128, 4 heads, FFN 256, 2 layers | 440,065 | 8.7 M |
-| `transformer_base` | d = 256, 4 heads, FFN 512, 2 layers | 1,404,289 | 27.9 M |
+| `transformer_base` | d = 256, 4 heads, FFN 512, 2 layers | 1,404,289 | 28.0 M |
 | `transformer_deep` | d = 256, 8 heads, FFN 512, 4 layers | 2,458,497 | 49.3 M |
-| `hybrid_base` (stretch goal) | LSTM(128) → 1 Transformer block | 862,465 | 17.1 M |
+| `hybrid_base` (stretch goal) | LSTM(128) → 1 Transformer block | 862,465 | 17.2 M |
 
 - `transformer_base` is the parameter-matched counterpart of `lstm_base`; they form the primary
   comparison.
@@ -135,7 +136,7 @@ Design rationale, equations and training recipes:
 |---|---|
 | Accuracy metrics | AUROC (primary), macro-F1, balanced accuracy, sensitivity, specificity, AUPRC; computed only on held-out folds |
 | Latency | Compiled `tf.function`, 50 warm-up and ≥ 300 timed calls, median and p95; batch 1 and 32; 1 and 8 threads; one process per model |
-| Other compute metrics | Parameters, analytic and profiled FLOPs, peak resident memory, training time per epoch, model file size; head-only and end-to-end |
+| Other compute metrics | Parameters, analytic MACs and FLOPs, peak resident memory, training time per epoch, model file size; head-only and end-to-end |
 | Statistics | Corrected resampled t-test, 95% confidence intervals and effect sizes, TOST equivalence (margin 0.03 AUROC), McNemar and DeLong tests, Holm correction |
 | Hardware | Intel Core i5-12450H (8 cores, 12 threads), 16 GB RAM, Windows 11, no GPU |
 
@@ -167,16 +168,14 @@ source .venv/Scripts/activate      # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Verify the models
+### Verify the setup
 
 From the repository root:
 
 ```bash
-python -m src.models.summary
+python -m pytest src/tests.py -q          # every check, including the parameter counts above
+python -m src.lstm --T 20 --dry-run       # build each preset on the real features, no training
 ```
-
-This builds every preset at T = 10, 20 and 40 and prints the parameter counts. They should match
-the table above.
 
 ### Data placement
 
@@ -189,47 +188,54 @@ data/raw/video-*.mp4          (535 files)
 
 ## Workflow
 
-The study runs as a sequence of steps, each driven by a config file in `configs/`.
+All code is five files in `src/`. Settings are plain constants at the top of each file.
 
-| Step | Purpose | Command | Status |
-|---|---|---|---|
-| 1. Verify models | Build all presets and check parameter counts | `python -m src.models.summary` | Implemented |
-| 2. Extract features | Sample frames and cache MobileNetV2 embeddings to `data/features/oral_T40.npz` | `python -m src.data.extract_features --dataset oral --frames 40` | Implemented |
-| 3. Create splits | Write stratified folds to `data/splits/oral_seed{0,1,2}.json` | `python -m src.data.splits --dataset oral` | Implemented |
-| 4. Train | One run per (preset, T, seed, fold); writes metrics and out-of-fold predictions to `results/` | `python -m src.training.train --preset lstm_base --T 20 --seed 0` | Implemented (not yet run) |
-| 5. Benchmark | Measure latency, memory and FLOPs on CPU | `python -m src.benchmark.run_grid` | Planned |
-| 6. Analyse | Hypothesis tests, summary tables and Pareto plots | `src/benchmark/report.py` | Planned |
-
-Commands marked *Planned* show the intended interface. Those modules are not implemented yet.
-
-Configuration files:
-
-| File | Contents |
+| File | What it holds |
 |---|---|
-| `configs/data.yaml` | Frame sampling, preprocessing, backbone and split settings |
-| `configs/lstm.yaml` | LSTM presets and training recipe |
-| `configs/transformer.yaml` | Transformer presets and training recipe |
-| `configs/benchmark.yaml` | Latency, memory and thread settings for the compute benchmark |
+| `src/common.py` | Everything shared: settings, data (labels, frame sampling, feature cache, splits), the shared classifier head, metrics, the training loop, CPU benchmarks and logging |
+| `src/lstm.py` | LSTM models (`lstm_small`, `lstm_base`, `bilstm_base`) and their optimiser settings |
+| `src/transformer.py` | Transformer models (`transformer_small`, `transformer_base`, `transformer_deep`) |
+| `src/hybrid.py` | LSTM followed by attention (`hybrid_base`); new hybrid designs go here |
+| `src/tests.py` | All automated checks |
+
+| Step | Command | Status |
+|---|---|---|
+| 1. Extract features | `python -m src.common extract` | Done (cache built) |
+| 2. Create splits | `python -m src.common splits` | Done (committed) |
+| 3. Train | `python -m src.lstm --preset lstm_base --T 20 --seed 0` (same for `src.transformer`, `src.hybrid`) | Ready, not run |
+| 4. Benchmark | `python -m src.common benchmark-all` (or `python -m src.lstm --preset lstm_base --benchmark --threads 1`) | Ready, not run |
+| 5. Summarise | `python -m src.common summary` | Ready, not run |
+
+Model files also take `--folds`, `--lr`, `--epochs`, `--overwrite` and `--dry-run`. Without
+`--preset`, every preset in the file is used.
+
+What gets logged (see `results/README.md` for the full list):
+- per run: settings, hardware and software versions, git commit, data fingerprints, parameter
+  counts (also per layer) and model size, per-epoch history (Keras and exact validation metrics,
+  learning rate, train / validation time, step-time percentiles, memory, weight norm), the
+  validation probabilities after every epoch, test / validation / train metrics at the 0.5 and
+  validation-chosen thresholds, training time, peak memory, and the probability for every clip
+- per benchmark: every raw timing, the latency distribution, throughput, peak memory, MACs and
+  FLOPs, for the temporal heads and for the shared MobileNetV2 backbone plus video decoding
+- every command's console output goes to a new file in `results/logs/`, and every event (run
+  start, each epoch, run end or failure, each benchmark) is appended to `results/events.jsonl`
+
+If something breaks mid-run, nothing is lost: each epoch is on disk as soon as it finishes and
+`status.json` says how far the run got. Re-running the same command moves the old attempt to
+`<run>/attempts/` and starts new files. A failing fold does not stop the other folds, and
+`benchmark-all` skips measurements that already exist, so it resumes where it stopped.
 
 ## Repository structure
 
 ```
 lstm-transformer-tradeoff/
-├── configs/                 Experiment configuration (data, LSTM, Transformer, benchmark)
-├── data/                    Local only: raw/ (videos), features/ (cache), splits/ (fold IDs)
-├── docs/                    All written documentation (summary, design, research)
-│   └── slides/              Progress review deck: PDF plus its HTML source
-├── results/                 One folder per training run (model weights are not committed)
-├── src/
-│   ├── data/                Frame sampling, feature extraction, splits, loaders
-│   ├── models/              LSTM, Transformer, hybrid, shared head, registry, param check
-│   ├── training/            Cross-validation training loop
-│   └── benchmark/           Latency, memory and FLOP measurement, final report
-├── tests/                   Automated tests
+├── src/                     The five code files (see the table above)
+├── data/                    raw/ (videos, local only), features/ (cache, local only), splits/ (fold IDs)
+├── results/                 One folder per training run, benchmark files and summary CSVs
+├── docs/                    All written documentation; slides/ holds the progress review deck
+├── CacheMemory.pdf          Original proposal deck
 └── requirements.txt
 ```
-
-Every folder has its own `README.md` explaining what is inside and how to use it.
 
 ## Project status
 
@@ -237,8 +243,8 @@ Every folder has its own `README.md` explaining what is inside and how to use it
 |---|---|---|
 | Architecture finalisation | Week of Oct 5 | Complete |
 | Data preprocessing | Week of Oct 12 | Complete: features cached, splits written |
-| Training | Week of Oct 19 | In progress: training loop ready, no runs yet |
-| Benchmarking | Week of Oct 26 | Not started |
+| Training | Week of Oct 19 | In progress: code ready, no runs yet |
+| Benchmarking | Week of Oct 26 | Code ready, no runs yet |
 | Final analysis | Week of Nov 2 | Not started |
 | Paper and hybrid model (buffer) | Week of Nov 9 | Optional |
 
